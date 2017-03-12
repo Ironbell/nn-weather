@@ -14,12 +14,13 @@ from eccodes import *
 GRID_SIZE = 0.75
 
 def drange(x, y, jump):
-  while x < y:
-    yield float(x)
-    x += decimal.Decimal(jump)
+  x_ = decimal.Decimal(x)
+  while x_ < y:
+    yield float(x_)
+    x_ += decimal.Decimal(jump)
     
 def round_nearest(x, a):
-    return round(round(x / a) * a, -int(math.floor(math.log10(a))))
+    return round(x / a) * a
 
 def crop_center(img, width, height):
     """
@@ -202,8 +203,14 @@ class DatasetMultiple:
         if params.max_frames < params.window_size * 2:
             raise Exception("max frames must be at least twice the window size")  
             
-        self.vector_size = int(1 + ((round_nearest(params.end_lat, GRID_SIZE) - round_nearest(params.start_lat, GRID_SIZE)) / GRID_SIZE) * \
-            1 + ((round_nearest(params.end_lon, GRID_SIZE) - round_nearest(params.start_lon, GRID_SIZE)) / GRID_SIZE))
+            
+        nelat = round_nearest(params.end_lat, GRID_SIZE)
+        nslat = round_nearest(params.start_lat, GRID_SIZE)
+        nelon = round_nearest(params.end_lon, GRID_SIZE)
+        nslon = round_nearest(params.start_lon, GRID_SIZE)
+
+        self.vector_size = int((1 + (nelat - nslat) / GRID_SIZE) * \
+            (1 + ((nelon - nslon) / GRID_SIZE)))
             
         print ("vector size is %i" % self.vector_size)
         
@@ -227,10 +234,10 @@ class DatasetMultiple:
             topLeft = codes_grib_find_nearest(gid, params.start_lat, params.start_lon)[0]
             bottomRight = codes_grib_find_nearest(gid, params.end_lat, params.end_lon)[0]
             
-            for lat in drange(topLeft.lat, bottomRight.lat, 0.75):
-                for lon in drange(topLeft.lon, bottomRight.lon, 0.75):
+            for lat in drange(topLeft.lat, bottomRight.lat + GRID_SIZE, GRID_SIZE):
+                for lon in drange(topLeft.lon, bottomRight.lon + GRID_SIZE, GRID_SIZE):
                     nearest = codes_grib_find_nearest(gid, lat, lon)[0]
-                    frame[frame_it] = max(0, nearest.value)
+                    frame[frameIt] = max(0, nearest.value)
                     if nearest.value == codes_get_double(gid, "missingValue"):
                         print ("missing")
                     frameIt = frameIt + 1

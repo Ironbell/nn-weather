@@ -1,2 +1,3 @@
-.grib
-.pyc
+*.grib
+*.pyc
+*.png

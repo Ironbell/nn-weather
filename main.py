@@ -3,6 +3,7 @@ from keras.models import load_model
 
 from dataset import *
 from network import *
+from visualise import *
 
 GRIB_TEMPERATURE = '/home/isa/sftp/total_2mtemp.grib'
 GRIB_PRESSURE = '/home/isa/sftp/total_spressure.grib'
@@ -26,7 +27,7 @@ def run():
     data = DatasetMultiple(params)
     
     # create and fit the LSTM network
-    if (False):
+    if (True):
         model = create_model(window_size, data.vector_size)
         train_model(model, data, epoch_count)
         model.save('model.h5')

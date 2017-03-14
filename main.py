@@ -1,4 +1,5 @@
 from attrdict import AttrDict
+from keras.models import load_model
 
 from dataset import *
 from network import *
@@ -25,7 +26,7 @@ def run():
     data = DatasetMultiple(params)
     
     # create and fit the LSTM network
-    if (True):
+    if (False):
         model = create_model(window_size, data.vector_size)
         train_model(model, data, epoch_count)
         model.save('model.h5')
@@ -36,7 +37,8 @@ def run():
     trainPredict, testPredict = evaluate_model(model, data)
     
     # plot the results
-    plot_predictions_images(data, trainPredict, testPredict)
+    plot_predictions_images_train(data, trainPredict)
+    plot_predictions_images_test(data, testPredict)
 
 def main():
     run()

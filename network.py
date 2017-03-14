@@ -1,9 +1,12 @@
 from keras.models import Sequential
 from keras.layers import Dense, Activation, LSTM, Dropout  
 from sklearn.metrics import mean_squared_error
-import pylab as plt
+
+import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 from dataset import *
+import colormap as cm
 
 def create_model(window_size, feature_count):
     """ 
@@ -93,29 +96,61 @@ def plot_predictions(dataset, trainPredict, testPredict):
     plt.plot(testPredictPlot)
     plt.show()
     
-def plot_predictions_images(dataset, trainPredict, testPredict):
-    window_size = dataset.params.window_size
-    which = 0
+def plot_predictions_images(params, file_name, dataX, dataY, predict):
+    nb_frames = 10
+    window_size = params.window_size
+    
+    # calculate lat and lon for axis scaling
+    nelat = round_nearest(params.end_lat, GRID_SIZE)
+    nslat = round_nearest(params.start_lat, GRID_SIZE)
+    nelon = round_nearest(params.end_lon, GRID_SIZE)
+    nslon = round_nearest(params.start_lon, GRID_SIZE)
 
-    for i in range(window_size):
-        fig = plt.figure(figsize=(10, 5))
+    lat_range = int((1 + (nelat - nslat) / GRID_SIZE))
+    lon_range = int((1 + (nelon - nslon) / GRID_SIZE))
 
-        ax = fig.add_subplot(121)
+    for i in range(nb_frames):
+        fig, axes = plt.subplots(nrows=1, ncols=window_size + 2)
+        fig.set_size_inches((window_size + 2) * 6, 5, forward=True)
+        
+        # plot trajectory
+        for axis_nr in range(window_size):
+            ax = axes.flat[axis_nr]
+            ax.text(nslon + 0.5, nslat + 0.25, 'Inital trajectory', fontsize=10, color='w')
+            toplot = np.reshape(dataX[i,axis_nr,:], (lat_range, -1))
+            ax.tick_params(labelsize=6)
+            im = ax.imshow(toplot, cmap=cm.YlOrRd(), extent=[nslon,nelon,nslat,nelat])
+        
+        # plot prediction
+        ax = axes.flat[window_size]
+        ax.text(nslon + 0.5, nslat + 0.25, 'Prediction', fontsize=10, color='w')
+        toplot = np.reshape(predict[i,:], (lat_range, -1))
+        ax.tick_params(labelsize=6)
+        im = ax.imshow(toplot, cmap=cm.YlOrRd(), extent=[nslon,nelon,nslat,nelat])
+        
+        # plot ground truth 
+        ax = axes.flat[window_size + 1]
+        plt.text(nslon + 0.5, nslat + 0.25, 'Ground truth', fontsize=10, color='w')
+        toplot = np.reshape(dataY[i,:], (lat_range, -1))
+        ax.tick_params(labelsize=6)
+        im = ax.imshow(toplot, cmap=cm.YlOrRd(), extent=[nslon,nelon,nslat,nelat])
 
-        if i == window_size - 1:
-            ax.text(1, 3, 'Prediction', fontsize=20, color='w')
-        else:
-            ax.text(1, 3, 'Inital trajectory', fontsize=20)
+        cax,kw = mpl.colorbar.make_axes([ax for ax in axes.flat], shrink=0.6, pad=0.02)
+        plt.colorbar(im, cax=cax, **kw)
+       
+        '''
+        ax = fig.add_subplot(133)
+        plt.text(1, 3, 'Error', fontsize=20)
+        toplot3 = abs(toplot1 - toplot2) 
+        plt.imshow(toplot3)
+        plt.colorbar()'''
+        
+        plt.savefig(('%i_animate_' % (i + 1)) + file_name + '.png', bbox_inches='tight',dpi=100) 
+    
+def plot_predictions_images_test(dataset, testPredict):
+    plot_predictions_images(dataset.params, \
+    'test', dataset.testX, dataset.testY, testPredict)
 
-        toplot = np.reshape(dataset.trainX[which,i,:], (dataset.lat_range, -1))
-
-        plt.imshow(toplot)
-        ax = fig.add_subplot(122)
-        plt.text(1, 3, 'Ground truth', fontsize=20)
-
-        #toplot = np.reshape(dataset.trainX[i,:], (dataset.lat_range, -1))
-        if i == window_size - 1:
-            toplot = np.reshape(trainPredict[which,:], (dataset.lat_range, -1))
-
-        plt.imshow(toplot)
-        plt.savefig('%i_animate.png' % (i + 1))
+def plot_predictions_images_train(dataset, trainPredict):
+    plot_predictions_images(dataset.params, \
+    'train', dataset.trainX, dataset.trainY, trainPredict)

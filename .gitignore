@@ -1,3 +1,4 @@
 *.grib
 *.pyc
 *.png
+*.h5

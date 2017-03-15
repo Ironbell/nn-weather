@@ -1,3 +1,6 @@
+import numpy as np
+np.random.seed(1337)
+
 from keras.models import Sequential
 from keras.layers import Dense, Activation, LSTM, Dropout  
 from sklearn.metrics import mean_squared_error

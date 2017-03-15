@@ -5,8 +5,11 @@ from dataset import *
 from network import *
 from visualise import *
 
-GRIB_TEMPERATURE = '/home/isa/sftp/total_2mtemp.grib'
-GRIB_PRESSURE = '/home/isa/sftp/total_spressure.grib'
+#GRIB_TEMPERATURE = '/home/isa/sftp/total_2mtemp.grib'
+#GRIB_PRESSURE = '/home/isa/sftp/total_spressure.grib'
+
+GRIB_TEMPERATURE = '/media/isa/VIS1/data/total_2mtemp.grib'
+GRIB_PRESSURE = '/home/isa/VIS1/data/total_spressure.grib'
 
 def run():
     window_size = 5
@@ -18,10 +21,10 @@ def run():
     params.start_lon = 6.108398 + 180
     params.end_lon = 10.524902 + 180
     params.grib_file = GRIB_TEMPERATURE
-    params.max_frames = 1000
-    params.test_fraction = 0.3
-    params.years = [2000, 2001, 2002, 2003]
-    params.months = [6, 7, 8]
+    params.train_years = [2000, 2001]
+    params.train_months = [6, 7, 8]
+    params.test_years = [2002]
+    params.test_months = [6, 7, 8]
 
     # load the data from the .grib files
     data = DatasetMultiple(params)

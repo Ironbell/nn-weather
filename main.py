@@ -1,52 +1,85 @@
-from attrdict import AttrDict
+﻿from attrdict import AttrDict
 from keras.models import load_model
+import numpy as np
+import json
 
 from dataset import *
 from network import *
 from visualise import *
 
-#GRIB_TEMPERATURE = '/home/isa/sftp/total_2mtemp.grib'
-#GRIB_PRESSURE = '/home/isa/sftp/total_spressure.grib'
-
-GRIB_TEMPERATURE = '/media/isa/VIS1/data/total_2mtemp.grib'
-GRIB_PRESSURE = '/home/isa/VIS1/data/total_spressure.grib'
-
-def run():
-    window_size = 5
-    epoch_count = 10
-    params = AttrDict()
-    params.window_size = window_size
-    params.start_lat = 45.839803
-    params.end_lat = 47.749943
-    params.start_lon = 6.108398 + 180
-    params.end_lon = 10.524902 + 180
-    params.grib_file = GRIB_TEMPERATURE
-    params.train_years = [2000, 2001]
-    params.train_months = [6, 7, 8]
-    params.test_years = [2002]
-    params.test_months = [6, 7, 8]
+def train(config):
+    # set (and check) params in config
+    train_params = AttrDict()
+    train_params.window_size = config['window_size']
+    train_params.start_lat = config['start_lat']
+    train_params.end_lat = config['end_lat']
+    train_params.start_lon = config['start_lon']
+    train_params.end_lon = config['end_lon']
+    train_params.grib_file = config['grib_file']
+    train_params.years = config['years']
+    train_params.months = config['months']
+    epoch_count = config['epoch_count']
+    model_file = config['model_file']
 
     # load the data from the .grib files
-    data = DatasetMultiple(params)
+    trainData = DatasetTrain(train_params)
     
     # create and fit the LSTM network
-    if (True):
-        model = create_model(window_size, data.vector_size)
-        train_model(model, data, epoch_count)
-        model.save('model.h5')
-    else:
-        model = load_model('model.h5')
-   
-    # make predictions
-    trainPredict, testPredict = evaluate_model(model, data)
+    model = create_model(train_params.window_size, trainData.vector_size)
+    train_model(model, trainData, epoch_count)
+    model.save(model_file)
     
-    # plot the results
-    plot_predictions_images_train(data, trainPredict)
-    plot_predictions_images_test(data, testPredict)
+def evaluate(config):
+    # set (and check) params in config    
+    test_params = AttrDict()
+    test_params.window_size = config['window_size']
+    test_params.start_lat = config['start_lat']
+    test_params.end_lat = config['end_lat']
+    test_params.start_lon = config['start_lon']
+    test_params.end_lon = config['end_lon']
+    test_params.grib_file = config['grib_file']
+    test_params.years = config['years']
+    test_params.months = config['months']
+    max_frames = config['max_frames']
+    
+    model = load_model(config['model_file'])
+    
+    testData = DatasetTrain(test_params)
+    
+    #predict
+    predict = evaluate_model(model, testData)
+    plot_predictions_images(testData, predict, 'plots/', max_frames)
+    
+def display():
+    score = np.load('score.npy')
+    display_score(score)
 
 def main():
-    run()
+    '''model = load_model('weather_model.h5')
+    for weight in model.get_weights():
+        print(weight.shape)
+    return 1'''
+    
+    model = create_model(1, 28)
+    for weight in model.get_weights():
+        print(weight.shape)
+    return 1
+    
+    config = json.loads(open(sys.argv[1]).read())
+    print(config)
+
+    if (config['action'] == 'train'):
+        train(config)
+    elif (config['action'] == 'evaluate'):
+        evaluate(config)
+    #elif (config['action'] == 'visualise'):
+    #    visualise(config)
+
     return 1
 
 if __name__ == "__main__":
-    sys.exit(main())
+    if len(sys.argv) < 2:
+        print("Usage: main.py configuration.json")
+        sys.exit(1)
+    else:
+        sys.exit(main())

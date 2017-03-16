@@ -42,21 +42,15 @@ def lonlat_to_idx(lon, lat, grid_lon=GRID_SIZE, grid_lat=GRID_SIZE):
     
 class FrameParameters:
     """
-        Parameters belonging to a training and/or test frame.
+        Parameters belonging to a training or test frame.
         @param date: the date (string/int) from where the frame is from
         @param time: the time (string/int) where the data is from
-        @param is_train: whether this belongs to the training data
-        @param is_test: this belongs to the testdata
-        @param is_new_train: whether this is the start of a new train sequence
-        @param is_new_test: whether this is the start of a new test sequence
+        @param is_new: whether this is the start of a new sequence
     """
-    def __init__(self, date, time, is_train, is_test, is_new_train, is_new_test):
-        self.date = str(date)
-        self.time = str(time)
-        self.is_train = is_train
-        self.is_test = is_test
-        self.is_new_train = is_new_train
-        self.is_new_test = is_new_test
+    def __init__(self, date, time, is_new):
+        self.date = str(date).zfill(8)
+        self.time = str(time).zfill(4)
+        self.is_new = is_new
     
 class Dataset:
     """
@@ -65,25 +59,28 @@ class Dataset:
     def __init__(self, params):
         self.check_params(params)
         self.load_frames()
-        self.create_sets()
+        self.normalize_frames()
+        self.create_samples()
         
     def include_date(self, dataDate):
         """ 
             Returns whether dataDate should be included
-            in train and/or test data
-            with respect to train and test dates given in the params
-            @param dataDate: date as a string
+            with respect years and months given in the params
+            @param dataDate: date as a string/int
         """
-        dataDate_ = str(dataDate)
+        dataDate_ = str(dataDate).zfill(8)
         year = int(dataDate_[:4])
         month = int(dataDate_[4:6])
 
-        is_train = (year in self.params.train_years and month in self.params.train_months)
-        is_test = (year in self.params.test_years and month in self.params.test_months)
-
-        return is_train, is_test
+        return (year in self.params.years and month in self.params.months)
         
     def check_params(self, params):
+        if not hasattr(params, 'max_frames'):
+            params.max_frames = float('inf')
+        
+        if params.max_frames < params.window_size + 1:
+            raise Exception("max frames must be at least window_size + 1")
+        
         if params.start_lat > params.end_lat:
             raise Exception("latitude dimensions do not match")
             
@@ -117,58 +114,32 @@ class Dataset:
         print ("vector size is %i" % self.vector_size)
         
         self.params = params
+        
+    def normalize_frames(self):
+        """ normalizes loaded frames """
+        raise NotImplementedError()
          
     def load_frames(self):
-        """ Loads the training files """
-        raise NotImplementedError()
-
-    def create_dataset(self, dataset, window_size):
-        """ convert an array of values into a dataset matrix """
-        raise NotImplementedError()
-    
-    def create_sets(self):
-        """ split data into training/test set and shape/format. """
-        raise NotImplementedError()
-
-class DatasetMultiple(Dataset):
-    """
-        Loads data from a grid file and divides them into training and evaluation groups
-        @param window_size: how many frames should be considered for the forecast
-        @param grib_file: the path to the grib file to load
-        @param start_lon: the start longitude to consider for the data cropping
-        @param end_lon: the end longitude to consider for the data cropping
-        @param start_lat: the start latitude to consider for the data cropping
-        @param end_lat: the end latitude to consider for the data cropping
-        @param train_years: only load train data from those years
-        @param test_years: only load test data from those years
-        @param train_months: only load train data from those months
-        @param test_months: only load test data from those months
-    """
-    def __init__(self, params):
-        Dataset.__init__(self, params)
-        
-    def load_frames(self):
-        """ Loads the training files """
+        """ Loads data from the grib file """
         self.frames = []
         self.frames_data = []
 
         f = open(self.params.grib_file)
         
         index = 0
-        is_new_train = True
-        is_new_test = True
+        is_new = True
  
         while 1:
             gid = codes_grib_new_from_file(f)
             if gid is None:
                 break
                 
-            # check if this matches our month and year for train and/or test
-            is_train, is_test = self.include_date(codes_get(gid, "dataDate"))
-            
-            if (not is_train and not is_test):
-                is_new_train = True
-                is_new_test = True
+            # check if this matches our month and year
+            dataDate = codes_get(gid, "dataDate")
+            if not self.include_date(dataDate):
+                is_new = True
+                print "skipping date: " + str(dataDate).zfill(8), "            \r",
+                codes_release(gid)
                 continue
                 
             frame = np.empty([self.vector_size])
@@ -186,16 +157,15 @@ class DatasetMultiple(Dataset):
                     frameIt = frameIt + 1
             
             self.frames.append(frame)
-            self.frames_data.append(FrameParameters(codes_get(gid, "dataDate"), codes_get(gid, "dataTime"), \
-            is_train, is_test, is_new_train, is_new_test))
-            is_new_train = not is_train 
-            is_new_test = not is_test
-            
+            self.frames_data.append(FrameParameters(dataDate, codes_get(gid, "dataTime"), \
+            is_new))
+            is_new = False 
+           
             codes_release(gid)
             index = index + 1
-            print "loading frames: ", index, "\r",
+            print "loading frames: ", index, "                 \r",
             
-            if index > 1000:
+            if index > self.params.max_frames:
                 break
     
         print ("")
@@ -203,7 +173,7 @@ class DatasetMultiple(Dataset):
         print ("frames shape:")
         print (self.frames.shape)
         f.close()
-        
+
     def create_dataset(self, dataset, window_size):
         """ convert an array of values into a dataset matrix """
         dataX, dataY = [], []
@@ -213,69 +183,95 @@ class DatasetMultiple(Dataset):
             dataY.append(dataset[i + window_size, :])
         return np.array(dataX), np.array(dataY)
     
-    def create_sets(self):
-        """ split data into training/test set and shape/format. """
-        # normalize the dataset
+    def create_samples(self):
+        """ split data into x and y parts and shapes them. """
+        # used later to map the frames to their frame parameters
+        self.frames_idx = []
+        frames_idx = 0
+
+        # split into train and test sets
+        frame_sets = []
+        frames = []
+
+        for index in range(len(self.frames)):
+            if (len(frames) > 0 and self.frames_data[index].is_new):
+                frame_sets.append(np.asarray(frames))
+                frames = []
+                self.frames_idx = self.frames_idx[:-self.params.window_size or None]
+            
+            frames.append(self.frames[index])
+            self.frames_idx.append(frames_idx)
+            frames_idx = frames_idx + 1
+                
+        if (len(frames) > 0):
+            frame_sets.append(np.asarray(frames))
+            frames = []
+            self.frames_idx = self.frames_idx[:-self.params.window_size or None]
+        
+        self.dataX = np.array([])
+        self.dataY = np.array([])
+
+        for frame_set in frame_sets:
+            dX, dY = self.create_dataset(frame_set, self.params.window_size)
+            self.dataX = np.concatenate((self.dataX, dX), 0) if self.dataX.size else dX
+            self.dataY = np.concatenate((self.dataY, dY), 0) if self.dataY.size else dY
+      
+        print ("shape of data X is:")
+        print (self.dataX.shape)
+        print ("shape of data Y is:")
+        print (self.dataY.shape)
+
+class DatasetTrain(Dataset):
+    """
+        Loads training data from a grid file, shapes and formats it.
+        @param params.window_size: how many frames should be considered for the forecast
+        @param params.max_frames: the maximum frames to load
+        @param params.grib_file: the path to the grib file to load
+        @param params.start_lon: the start longitude to consider for the data cropping
+        @param params.end_lon: the end longitude to consider for the data cropping
+        @param params.start_lat: the start latitude to consider for the data cropping
+        @param params.end_lat: the end latitude to consider for the data cropping
+        @param params.years: only load data from those years
+        @param params.months: only load data from those months
+    """
+    def __init__(self, params):
+        Dataset.__init__(self, params)
+
+    def normalize_frames(self):
+        """ normalizes loaded frames """
         self.frames = self.frames.astype('float32')
         
         self.scaler = MinMaxScaler(feature_range=(0, 1))
         self.frames = self.scaler.fit_transform(self.frames)
         
-        # split into train and test sets
-        train_frames = []
-        train = []
-        test_frames = []
-        test = []
+    def get_scaler_params(self):
+        """ 
+            returns the params of the MinMaxScaler
+            which can then be used to create a scaler for the test set
+        """
+        return self.scaler.get_params(deep=True)
         
-        self.test_frame_idx = []
-        self.train_frame_idx = []
- 
-        for index in range(len(self.frames)):
-            if (self.frames_data[index].is_train):
-                if (len(train) > 0 and self.frames_data[index].is_new_train):
-                    train_frames.append(np.asarray(train))
-                    train = []
-                
-                train.append(self.frames[index])
-                self.train_frame_idx.append(index)
-                
-            if (self.frames_data[index].is_test):
-                if (len(test) > 0 and self.frames_data[index].is_new_test):
-                    test_frames.append(np.asarray(test))
-                    test = []
-                
-                test.append(self.frames[index])
-                self.test_frame_idx.append(index)
-                
-        if (len(train) > 0):
-            train_frames.append(np.asarray(train))
-            train = []
-        
-        if (len(test) > 0):
-            test_frames.append(np.asarray(test))
-            test = []
+class DatasetTest(Dataset):
+    """
+        Loads test data from a grid file, shapes and formats it.
+        @param params.window_size: how many frames should be considered for the forecast
+        @param params.max_frames: the maximum frames to load
+        @param params.grib_file: the path to the grib file to load
+        @param params.start_lon: the start longitude to consider for the data cropping
+        @param params.end_lon: the end longitude to consider for the data cropping
+        @param params.start_lat: the start latitude to consider for the data cropping
+        @param params.end_lat: the end latitude to consider for the data cropping
+        @param params.years: only load data from those years
+        @param params.months: only load data from those months
+        @param scaler_params: scaler params gotten from the training set
+    """
+    def __init__(self, params, scaler_params):
+        print(scaler_params)
+        self.scaler = MinMaxScaler()
+        self.scaler.set_params(**scaler_params)
+        Dataset.__init__(self, params)
 
-        self.trainX = np.array([])
-        self.trainY = np.array([])
-        self.testX = np.array([])
-        self.testY = np.array([])
-        
-        for train in train_frames:
-            tX, tY = self.create_dataset(train, self.params.window_size)
-            self.trainX = np.concatenate((self.trainX, tX), 0) if self.trainX.size else tX
-            self.trainY = np.concatenate((self.trainY, tY), 0) if self.trainY.size else tY
-        
-        for test in test_frames:
-            tX, tY = self.create_dataset(test, self.params.window_size)
-            self.testX = np.concatenate((self.testX, tX), 0) if self.testX.size else tX
-            self.testY = np.concatenate((self.testY, tY), 0) if self.testY.size else tY
-
-        print ("shape of train data X is:")
-        print (self.trainX.shape)
-        print ("shape of train data Y is:")
-        print (self.trainY.shape)
-        print ("shape of test data X is:")
-        print (self.testX.shape)
-        print ("shape of test data Y is:")
-        print (self.testY.shape)
-
+    def normalize_frames(self):
+        """ normalizes loaded frames """
+        self.frames = self.frames.astype('float32')
+        self.frames = self.scaler.transform(self.frames)

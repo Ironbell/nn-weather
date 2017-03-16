@@ -1,0 +1,13 @@
+{
+    "action" : "evaluate",
+    "window_size" : 8,
+    "max_frames" : 20,
+    "start_lat" : 45.839803,
+    "end_lat" : 47.749943,
+    "start_lon" : 186.108398,
+    "end_lon" : 190.524902,
+    "grib_file" : "/media/isa/VIS1/data/total_2mtemp.grib",
+    "years" : [2016],
+    "months" : [6],
+    "model_file" : "weather_model.h5"
+}

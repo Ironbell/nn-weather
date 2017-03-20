@@ -6,7 +6,7 @@
     "end_lat" : 47.749943,
     "start_lon" : 186.108398,
     "end_lon" : 190.524902,
-    "grib_file" : "/media/isa/VIS1/data/total_2mtemp.grib",
+    "grib_folder" : "/media/isa/VIS1/temperature",
     "years" : [2000, 2001],
     "months" : [6, 7, 8],
     "model_file" : "model_test.h5"

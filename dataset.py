@@ -62,17 +62,16 @@ class Dataset:
         self.normalize_frames()
         self.create_samples()
         
-    def include_date(self, dataDate):
+    def include_month(self, dataDate):
         """ 
             Returns whether dataDate should be included
-            with respect years and months given in the params
+            with to the months given in the params
             @param dataDate: date as a string/int
         """
         dataDate_ = str(dataDate).zfill(8)
-        year = int(dataDate_[:4])
         month = int(dataDate_[4:6])
 
-        return (year in self.params.years and month in self.params.months)
+        return (month in self.params.months)
         
     def check_params(self, params):
         if not hasattr(params, 'max_frames'):
@@ -123,56 +122,57 @@ class Dataset:
         """ Loads data from the grib file """
         self.frames = []
         self.frames_data = []
-
-        f = open(self.params.grib_file)
         
         index = 0
         is_new = True
- 
-        while 1:
-            gid = codes_grib_new_from_file(f)
-            if gid is None:
-                break
+
+        for year in self.params.years:
+            f = open(self.params.grib_folder + str(year) + ".grib")
+
+            while index <= self.params.max_frames:
+                gid = codes_grib_new_from_file(f)
+                if gid is None:
+                    break
+                    
+                # check if this matches our month and year
+                dataDate = codes_get(gid, "dataDate")
+                if not self.include_month(dataDate):
+                    is_new = True
+                    print "skipping date: " + str(dataDate).zfill(8), "            \r",
+                    codes_release(gid)
+                    continue
+                    
+                frame = np.empty([self.vector_size])
+                frameIt = 0
                 
-            # check if this matches our month and year
-            dataDate = codes_get(gid, "dataDate")
-            if not self.include_date(dataDate):
-                is_new = True
-                print "skipping date: " + str(dataDate).zfill(8), "            \r",
+                bottomLeft = codes_grib_find_nearest(gid, self.params.start_lat, self.params.start_lon)[0]
+                topRight = codes_grib_find_nearest(gid, self.params.end_lat, self.params.end_lon)[0]
+                
+                for lat in reversed(list(drange(bottomLeft.lat, topRight.lat + GRID_SIZE, GRID_SIZE))):
+                    for lon in drange(bottomLeft.lon, topRight.lon + GRID_SIZE, GRID_SIZE):
+                        nearest = codes_grib_find_nearest(gid, lat, lon)[0]
+                        frame[frameIt] = max(0, nearest.value)
+                        if nearest.value == codes_get_double(gid, "missingValue"):
+                            raise Warning("missing value!")
+                        frameIt = frameIt + 1
+                
+                self.frames.append(frame)
+                self.frames_data.append(FrameParameters(dataDate, codes_get(gid, "dataTime"), \
+                is_new))
+                is_new = False 
+               
                 codes_release(gid)
-                continue
-                
-            frame = np.empty([self.vector_size])
-            frameIt = 0
-            
-            bottomLeft = codes_grib_find_nearest(gid, self.params.start_lat, self.params.start_lon)[0]
-            topRight = codes_grib_find_nearest(gid, self.params.end_lat, self.params.end_lon)[0]
-            
-            for lat in reversed(list(drange(bottomLeft.lat, topRight.lat + GRID_SIZE, GRID_SIZE))):
-                for lon in drange(bottomLeft.lon, topRight.lon + GRID_SIZE, GRID_SIZE):
-                    nearest = codes_grib_find_nearest(gid, lat, lon)[0]
-                    frame[frameIt] = max(0, nearest.value)
-                    if nearest.value == codes_get_double(gid, "missingValue"):
-                        raise Warning("missing value!")
-                    frameIt = frameIt + 1
-            
-            self.frames.append(frame)
-            self.frames_data.append(FrameParameters(dataDate, codes_get(gid, "dataTime"), \
-            is_new))
-            is_new = False 
-           
-            codes_release(gid)
-            index = index + 1
-            print "loading frames: ", index, "                 \r",
-            
+                index = index + 1
+                print "loading frames: ", index, "                 \r",
+
+            f.close()
             if index > self.params.max_frames:
-                break
-    
+                    break
+            
         print ("")
         self.frames = np.asarray(self.frames)
         print ("frames shape:")
         print (self.frames.shape)
-        f.close()
 
     def create_dataset(self, dataset, window_size):
         """ convert an array of values into a dataset matrix """

@@ -74,6 +74,10 @@ class Dataset:
         return (month in self.params.months)
         
     def check_params(self, params):
+        """ 
+            Checks the parameters for validity
+        """
+        raise NotImplementedError()
         if not hasattr(params, 'max_frames'):
             params.max_frames = float('inf')
         
@@ -116,10 +120,14 @@ class Dataset:
         
     def normalize_frames(self):
         """ normalizes loaded frames """
-        raise NotImplementedError()
-         
+        self.frames = self.frames.astype('float32')
+        
+        self.scaler = MinMaxScaler(feature_range=(0, 1))
+        self.frames = self.scaler.fit_transform(self.frames)
+
     def load_frames(self):
         """ Loads data from the grib file """
+        raise NotImplementedError()
         self.frames = []
         self.frames_data = []
         
@@ -221,9 +229,9 @@ class Dataset:
         print ("shape of data Y is:")
         print (self.dataY.shape)
 
-class DatasetTrain(Dataset):
+class DatasetArea(Dataset):
     """
-        Loads training data from a grid file, shapes and formats it.
+        Loads training/test data in a certain lon/lat range from a grid file, shapes and formats it.
         @param params.window_size: how many frames should be considered for the forecast
         @param params.max_frames: the maximum frames to load
         @param params.grib_file: the path to the grib file to load
@@ -237,41 +245,224 @@ class DatasetTrain(Dataset):
     def __init__(self, params):
         Dataset.__init__(self, params)
 
-    def normalize_frames(self):
-        """ normalizes loaded frames """
-        self.frames = self.frames.astype('float32')
-        
-        self.scaler = MinMaxScaler(feature_range=(0, 1))
-        self.frames = self.scaler.fit_transform(self.frames)
-        
-    def get_scaler_params(self):
+    def check_params(self, params):
         """ 
-            returns the params of the MinMaxScaler
-            which can then be used to create a scaler for the test set
+            Checks the parameters for validity
         """
-        return self.scaler.get_params(deep=True)
+        if not hasattr(params, 'max_frames'):
+            params.max_frames = float('inf')
         
-class DatasetTest(Dataset):
+        if params.max_frames < params.window_size + 1:
+            raise Exception("max frames must be at least window_size + 1")
+        
+        if params.start_lat > params.end_lat:
+            raise Exception("latitude dimensions do not match")
+            
+        if params.start_lon > params.end_lon:
+            raise Exception("longitude dimensions do not match")  
+
+        if params.start_lon > 360 or params.start_lon < 0:
+            raise Exception("longitude (start) must be between 0 and 360")   
+            
+        if params.end_lon > 360 or params.end_lon < 0:
+            raise Exception("longitude (end) must be between 0 and 360")  
+            
+        if params.start_lat > 90 or params.start_lat < -90:
+            raise Exception("latitude (start) must be between -90 and 90")   
+            
+        if params.end_lat > 90 or params.end_lat < -90:
+            raise Exception("latitude (end) must be between -90 and 90") 
+            
+        if params.window_size < 1:
+            raise Exception("window size must be at least one") 
+
+        nelat = round_nearest(params.end_lat, GRID_SIZE)
+        nslat = round_nearest(params.start_lat, GRID_SIZE)
+        nelon = round_nearest(params.end_lon, GRID_SIZE)
+        nslon = round_nearest(params.start_lon, GRID_SIZE)
+
+        self.lat_range = int((1 + (nelat - nslat) / GRID_SIZE))
+        self.lon_range = int((1 + (nelon - nslon) / GRID_SIZE))
+        self.vector_size = self.lat_range * self.lon_range
+            
+        print ("vector size is %i" % self.vector_size)
+        
+        self.params = params
+
+    def load_frames(self):
+        """ Loads data from the grib file """
+        self.frames = []
+        self.frames_data = []
+        
+        index = 0
+        is_new = True
+
+        for year in self.params.years:
+            f = open(self.params.grib_folder + str(year) + ".grib")
+
+            while index <= self.params.max_frames:
+                gid = codes_grib_new_from_file(f)
+                if gid is None:
+                    break
+                    
+                # check if this matches our month and year
+                dataDate = codes_get(gid, "dataDate")
+                if not self.include_month(dataDate):
+                    is_new = True
+                    print "skipping date: " + str(dataDate).zfill(8), "            \r",
+                    codes_release(gid)
+                    continue
+                    
+                frame = np.empty([self.vector_size])
+                frameIt = 0
+                
+                bottomLeft = codes_grib_find_nearest(gid, self.params.start_lat, self.params.start_lon)[0]
+                topRight = codes_grib_find_nearest(gid, self.params.end_lat, self.params.end_lon)[0]
+                
+                for lat in reversed(list(drange(bottomLeft.lat, topRight.lat + GRID_SIZE, GRID_SIZE))):
+                    for lon in drange(bottomLeft.lon, topRight.lon + GRID_SIZE, GRID_SIZE):
+                        nearest = codes_grib_find_nearest(gid, lat, lon)[0]
+                        frame[frameIt] = max(0, nearest.value)
+                        if nearest.value == codes_get_double(gid, "missingValue"):
+                            raise Warning("missing value!")
+                        frameIt = frameIt + 1
+                
+                self.frames.append(frame)
+                self.frames_data.append(FrameParameters(dataDate, codes_get(gid, "dataTime"), \
+                is_new))
+                is_new = False 
+               
+                codes_release(gid)
+                index = index + 1
+                print "loading frames: ", index, "                 \r",
+
+            f.close()
+            if index > self.params.max_frames:
+                    break
+            
+        print ("")
+        self.frames = np.asarray(self.frames)
+        print ("frames shape:")
+        print (self.frames.shape)
+        
+class DatasetNearest(Dataset):
     """
-        Loads test data from a grid file, shapes and formats it.
+        Loads training/test data of the nearest n points from a grid file, shapes and formats it.
         @param params.window_size: how many frames should be considered for the forecast
         @param params.max_frames: the maximum frames to load
         @param params.grib_file: the path to the grib file to load
-        @param params.start_lon: the start longitude to consider for the data cropping
-        @param params.end_lon: the end longitude to consider for the data cropping
-        @param params.start_lat: the start latitude to consider for the data cropping
-        @param params.end_lat: the end latitude to consider for the data cropping
+        @param params.lon: the longitude of the center point
+        @param params.lat: the latitude of the center point
+        @param params.npoints: how many points to load
         @param params.years: only load data from those years
         @param params.months: only load data from those months
-        @param scaler_params: scaler params gotten from the training set
     """
-    def __init__(self, params, scaler_params):
-        print(scaler_params)
-        self.scaler = MinMaxScaler()
-        self.scaler.set_params(**scaler_params)
+    def __init__(self, params):
         Dataset.__init__(self, params)
+        
+    def check_params(self, params):
+        """ 
+            Checks the parameters for validity
+        """
+        if not hasattr(params, 'max_frames'):
+            params.max_frames = float('inf')
+        
+        if params.max_frames < params.window_size + 1:
+            raise Exception("max frames must be at least window_size + 1")
 
-    def normalize_frames(self):
-        """ normalizes loaded frames """
-        self.frames = self.frames.astype('float32')
-        self.frames = self.scaler.transform(self.frames)
+        if params.lon > 360 or params.lon < 0:
+            raise Exception("longitude must be between 0 and 360")   
+
+        if params.lat > 90 or params.lat < -90:
+            raise Exception("latitude must be between -90 and 90")   
+      
+        if params.window_size < 1:
+            raise Exception("window size must be at least one") 
+            
+        if params.npoints < 1:
+            raise Exception("n points must be at least one") 
+
+        params.lat = round_nearest(params.lat, GRID_SIZE)
+        params.lon = round_nearest(params.lon, GRID_SIZE)
+       
+        self.vector_size = params.npoints
+            
+        print ("vector size is %i" % self.vector_size)
+        
+        self.params = params
+        
+    def calculate_npoints(self):
+        """ 
+            returns a list of the nearest n points (lat, lon)
+        """
+        nnearest = []
+        
+        bound_range = int(math.ceil(math.sqrt(self.params.npoints)))
+        if bound_range % 2 == 0:
+            bound_range = bound_range // 2
+        else:
+            bound_range = (bound_range - 1) // 2
+            
+        for x in range(-bound_range, bound_range + 1):
+            for y in range(-bound_range, bound_range + 1):
+                nnearest.append((x, y))
+                
+        nnearest.sort(key=lambda tup: (tup[0] * tup[0] + tup[1] * tup[1]))
+
+        nnearest = nnearest[:self.params.npoints]
+        nnearest = [tuple((GRID_SIZE * tup[0] + self.params.lat, GRID_SIZE * tup[1] + self.params.lon)) for tup in nnearest] 
+
+        return nnearest
+
+    def load_frames(self):
+        """ Loads data from the grib file """
+        self.frames = []
+        self.frames_data = []
+        
+        index = 0
+        is_new = True
+        nnearest = self.calculate_npoints()
+
+        for year in self.params.years:
+            f = open(self.params.grib_folder + str(year) + ".grib")
+
+            while index <= self.params.max_frames:
+                gid = codes_grib_new_from_file(f)
+                if gid is None:
+                    break
+                    
+                # check if this matches our month and year
+                dataDate = codes_get(gid, "dataDate")
+                if not self.include_month(dataDate):
+                    is_new = True
+                    print "skipping date: " + str(dataDate).zfill(8), "            \r",
+                    codes_release(gid)
+                    continue
+                    
+                frame = np.empty([self.vector_size])
+                frameIt = 0
+                
+                for nearest_point in nnearest:
+                    nearest = codes_grib_find_nearest(gid, nearest_point[0], nearest_point[1])[0]
+                    frame[frameIt] = max(0, nearest.value)
+                    if nearest.value == codes_get_double(gid, "missingValue"):
+                        raise Warning("missing value!")
+                    frameIt = frameIt + 1
+            
+                self.frames.append(frame)
+                self.frames_data.append(FrameParameters(dataDate, codes_get(gid, "dataTime"), \
+                is_new))
+                is_new = False 
+               
+                codes_release(gid)
+                index = index + 1
+                print "loading frames: ", index, "                 \r",
+
+            f.close()
+            if index > self.params.max_frames:
+                break
+            
+        print ("")
+        self.frames = np.asarray(self.frames)
+        print ("frames shape:")
+        print (self.frames.shape)

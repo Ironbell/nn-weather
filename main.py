@@ -22,10 +22,10 @@ def train(config):
     model_file = config['model_file']
 
     # load the data from the .grib files
-    trainData = DatasetTrain(train_params)
+    trainData = DatasetArea(train_params)
     
     # create and fit the LSTM network
-    model = create_model(train_params.window_size, trainData.vector_size)
+    model = create_model(train_params.window_size, trainData.vector_size, 200)
     train_model(model, trainData, epoch_count)
     model.save(model_file)
     
@@ -44,7 +44,7 @@ def evaluate(config):
     
     model = load_model(config['model_file'])
     
-    testData = DatasetTrain(test_params)
+    testData = DatasetArea(test_params)
     
     #predict
     predict = evaluate_model(model, testData)
@@ -60,7 +60,7 @@ def main():
         print(weight.shape)
     return 1'''
     
-    model = create_model(1, 28)
+    model = create_model(1, 28, 200)
     for weight in model.get_weights():
         print(weight.shape)
     return 1

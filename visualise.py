@@ -49,14 +49,15 @@ def plot_predictions_images(dataset, predict, folder_name, max_frames):
             ax.set_title(dataset.frames_data[dataset.frames_idx[i + axis_nr]].date + '-' + \
                 dataset.frames_data[dataset.frames_idx[i + axis_nr]].time)
             im = ax.imshow(toplot, cmap=colmap, extent=[nslon,nelon,nslat,nelat])
+
+        next_date = dataset.frames_data[dataset.frames_idx[i + window_size + dataset.params.forecast_distance - 1]]
         
         # plot prediction
         ax = axes.flat[window_size]
         ax.text(nslon + 0.5, nslat + 0.25, 'Prediction', fontsize=10, color='w')
         toplot = np.reshape(predict[i,:], (lat_range, -1))
         ax.tick_params(labelsize=6)
-        ax.set_title(dataset.frames_data[dataset.frames_idx[i + window_size]].date + '-' + \
-            dataset.frames_data[dataset.frames_idx[i + window_size]].time)
+        ax.set_title(next_date.date + '-' + next_date.time)
         im = ax.imshow(toplot, cmap=colmap, extent=[nslon,nelon,nslat,nelat])
         
         # plot ground truth 
@@ -64,8 +65,7 @@ def plot_predictions_images(dataset, predict, folder_name, max_frames):
         plt.text(nslon + 0.5, nslat + 0.25, 'Ground truth', fontsize=10, color='w')
         toplot = np.reshape(dataset.dataY[i,:], (lat_range, -1))
         ax.tick_params(labelsize=6)
-        ax.set_title(dataset.frames_data[dataset.frames_idx[i + window_size]].date + '-' + \
-            dataset.frames_data[dataset.frames_idx[i + window_size]].time)
+        ax.set_title(next_date.date + '-' + next_date.time)
         im = ax.imshow(toplot, cmap=colmap, extent=[nslon,nelon,nslat,nelat])
 
         cax,kw = mpl.colorbar.make_axes([ax for ax in axes.flat], shrink=0.6, pad=0.02)

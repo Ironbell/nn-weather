@@ -78,45 +78,6 @@ class Dataset:
             Checks the parameters for validity
         """
         raise NotImplementedError()
-        if not hasattr(params, 'max_frames'):
-            params.max_frames = float('inf')
-        
-        if params.max_frames < params.window_size + 1:
-            raise Exception("max frames must be at least window_size + 1")
-        
-        if params.start_lat > params.end_lat:
-            raise Exception("latitude dimensions do not match")
-            
-        if params.start_lon > params.end_lon:
-            raise Exception("longitude dimensions do not match")  
-
-        if params.start_lon > 360 or params.start_lon < 0:
-            raise Exception("longitude (start) must be between 0 and 360")   
-            
-        if params.end_lon > 360 or params.end_lon < 0:
-            raise Exception("longitude (end) must be between 0 and 360")  
-            
-        if params.start_lat > 90 or params.start_lat < -90:
-            raise Exception("latitude (start) must be between -90 and 90")   
-            
-        if params.end_lat > 90 or params.end_lat < -90:
-            raise Exception("latitude (end) must be between -90 and 90") 
-            
-        if params.window_size < 1:
-            raise Exception("window size must be at least one") 
-
-        nelat = round_nearest(params.end_lat, GRID_SIZE)
-        nslat = round_nearest(params.start_lat, GRID_SIZE)
-        nelon = round_nearest(params.end_lon, GRID_SIZE)
-        nslon = round_nearest(params.start_lon, GRID_SIZE)
-
-        self.lat_range = int((1 + (nelat - nslat) / GRID_SIZE))
-        self.lon_range = int((1 + (nelon - nslon) / GRID_SIZE))
-        self.vector_size = self.lat_range * self.lon_range
-            
-        print ("vector size is %i" % self.vector_size)
-        
-        self.params = params
         
     def normalize_frames(self):
         """ normalizes loaded frames """
@@ -182,13 +143,16 @@ class Dataset:
         print ("frames shape:")
         print (self.frames.shape)
 
-    def create_dataset(self, dataset, window_size):
+    def create_dataset(self, dataset):
         """ convert an array of values into a dataset matrix """
+        window_size = self.params.window_size
+        forecast_distance = self.params.forecast_distance
+
         dataX, dataY = [], []
-        for i in range(len(dataset) - window_size - 1):
+        for i in range(len(dataset) - window_size - forecast_distance):
             a = dataset[i:(i + window_size), :]
             dataX.append(a)
-            dataY.append(dataset[i + window_size, :])
+            dataY.append(dataset[i + window_size + forecast_distance - 1, :])
         return np.array(dataX), np.array(dataY)
     
     def create_samples(self):
@@ -220,7 +184,7 @@ class Dataset:
         self.dataY = np.array([])
 
         for frame_set in frame_sets:
-            dX, dY = self.create_dataset(frame_set, self.params.window_size)
+            dX, dY = self.create_dataset(frame_set)
             self.dataX = np.concatenate((self.dataX, dX), 0) if self.dataX.size else dX
             self.dataY = np.concatenate((self.dataY, dY), 0) if self.dataY.size else dY
       
@@ -251,9 +215,15 @@ class DatasetArea(Dataset):
         """
         if not hasattr(params, 'max_frames'):
             params.max_frames = float('inf')
+
+        if not hasattr(params, 'forecast_distance'):
+            params.forecast_distance = 1
         
         if params.max_frames < params.window_size + 1:
             raise Exception("max frames must be at least window_size + 1")
+
+        if params.forecast_distance < 1:
+            raise Exception("forecast distance must be at least 1")
         
         if params.start_lat > params.end_lat:
             raise Exception("latitude dimensions do not match")
@@ -366,10 +336,16 @@ class DatasetNearest(Dataset):
         """
         if not hasattr(params, 'max_frames'):
             params.max_frames = float('inf')
+
+        if not hasattr(params, 'forecast_distance'):
+            params.forecast_distance = 1
         
         if params.max_frames < params.window_size + 1:
             raise Exception("max frames must be at least window_size + 1")
 
+        if params.forecast_distance < 1:
+            raise Exception("forecast distance must be at least 1")
+        
         if params.lon > 360 or params.lon < 0:
             raise Exception("longitude must be between 0 and 360")   
 

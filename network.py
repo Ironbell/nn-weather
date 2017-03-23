@@ -2,10 +2,28 @@ import numpy as np
 np.random.seed(1337)
 
 from keras.models import Sequential
+from keras.callbacks import Callback, ModelCheckpoint
 from keras.layers import Dense, Activation, LSTM, Dropout  
 from sklearn.metrics import mean_squared_error
 
 from dataset import *
+
+class EarlyStoppingByLossVal(Callback):
+    def __init__(self, monitor='val_loss', value=0.00001, verbose=0):
+        super(Callback, self).__init__()
+        self.monitor = monitor
+        self.value = value
+        self.verbose = verbose
+
+    def on_epoch_end(self, epoch, logs={}):
+        current = logs.get(self.monitor)
+        if current is None:
+            warnings.warn("Early stopping requires %s available!" % self.monitor, RuntimeWarning)
+
+        if current < self.value:
+            if self.verbose > 0:
+                print("Epoch %05d: early stopping THR" % epoch)
+            self.model.stop_training = True
 
 def create_model(window_size, feature_count, hidden_neurons):
     """ 
@@ -19,10 +37,55 @@ def create_model(window_size, feature_count, hidden_neurons):
     model = Sequential()  
     model.add(LSTM(hidden_neurons, input_shape=(window_size, feature_count), return_sequences=False))  
     model.add(Dropout(dropout))
-    #model.add(LSTM(hidden_neurons, return_sequences=False))
-    #model.add(Dropout(dropout))
     model.add(Dense(feature_count))  
-    model.add(Activation("linear"))   
+    model.add(Activation("sigmoid"))   
+    
+    model.compile(loss="mean_squared_error", optimizer="rmsprop")  
+    return model
+    
+def create_deep_model(window_size, feature_count, hidden_neurons, lstm_depth):
+    """ 
+        creates, compiles and returns a RNN model 
+        @param window_size: the number of previous time steps
+        @param feature_count: the number of features in the model
+        @param hidden_neurons: the number of hidden neurons per LSTM layer
+        @lstm_depth: how many lstm layers (at least one)
+    """
+
+    dropout = 0.2
+    
+    lstm_depth = max(1, lstm_depth)
+    
+    model = Sequential()  
+    
+    for i in range(lstm_depth):
+        if (i == 0):
+            model.add(LSTM(hidden_neurons, input_shape=(window_size, feature_count), return_sequences=(i<lstm_depth-1)))
+        else:
+            model.add(LSTM(hidden_neurons, return_sequences=(i<lstm_depth-1)))
+        model.add(Dropout(dropout))
+    
+    model.add(Dense(feature_count))  
+    model.add(Activation("sigmoid"))   
+    
+    model.compile(loss="mean_squared_error", optimizer="rmsprop")  
+    return model
+ 
+def create_model_activation(window_size, feature_count, hidden_neurons, activation_type):
+    """ 
+        creates, compiles and returns a RNN model 
+        @param window_size: the number of previous time steps
+        @param feature_count: the number of features in the model
+        @param hidden_neurons: the number of hidden neurons per LSTM layer
+        @param activation_type: type of the activation (see available activations @keras documentation)
+    """
+    dropout = 0.2
+    
+    model = Sequential()  
+    model.add(LSTM(hidden_neurons, input_shape=(window_size, feature_count), return_sequences=False))  
+    model.add(Dropout(dropout))
+    model.add(Dense(feature_count))  
+    model.add(Activation(activation_type))   
     
     model.compile(loss="mean_squared_error", optimizer="rmsprop")  
     return model
@@ -35,9 +98,15 @@ def train_model(model, dataset, epoch_count):
         @param epoch_count: number of epochs to train
         
         TODO: maybe specify if the model needs to be saved between epochs?
-        TODO: maybe specify a target validation loss?
+        TODO: maybe specify a target validation loss? (monitor='val_loss')
     """
-    model.fit(dataset.dataX, dataset.dataY, batch_size=1, nb_epoch=epoch_count, validation_split=0.05)
+    
+    '''callbacks = [
+        EarlyStoppingByLossVal(monitor='loss', value=0.001, verbose=1),
+        ModelCheckpoint(kfold_weights_path, monitor='loss', save_best_only=True, verbose=0),
+    ]'''
+    
+    model.fit(dataset.dataX, dataset.dataY, batch_size=2, nb_epoch=epoch_count, validation_split=0.05)
     
 def evaluate_model(model, dataset, data_type=''):
     """ 

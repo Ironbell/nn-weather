@@ -119,10 +119,10 @@ def test_nb_neurons():
     plt.grid(True)
     plt.savefig("test_nb_neurons/plot.png")
     plt.show()
-
+    
 def test_window_size():
     ''' 
-        trains a network with different number neurons 
+        trains a network with different window sizes
         compares and visualises the prediction error
     '''
     train_params = AttrDict()
@@ -175,11 +175,258 @@ def test_window_size():
     plt.grid(True)
     plt.savefig("test_window_size/plot.png")
     plt.show()
+    
+def test_network_depth():
+    ''' 
+        trains several networks with different number of LSTM layers
+    '''
+    train_params = AttrDict()
+    train_params.window_size = 12
+    train_params.lat = 47.25
+    train_params.lon = 189.0
+    train_params.npoints = 25
+    train_params.grib_folder = '/media/isa/VIS1/temperature/'
+    train_params.months = [6,7,8]
+
+    network_depth_list = [1, 2, 3, 4]
+    results = np.zeros((len(network_depth_list), 2))
+    results_it = 0
+    
+    # load data
+    train_params.years = [2000,2001,2002]
+    trainData = DatasetNearest(train_params)
+    
+    train_params.years = [2003]
+    testData = DatasetNearest(train_params)
+
+    #train and save the model files
+    print ('training started...')
+    for network_depth in network_depth_list:
+
+        model_file = 'test_network_depth/model_nd_' + str(network_depth) + '.h5'
+        
+        # create and fit the LSTM network
+        print('creating model for network_depth: ' + str(network_depth))
+        model = create_deep_model(train_params.window_size, trainData.vector_size, train_params.npoints, network_depth)
+        train_model(model, trainData, 50 * network_depth)
+        model.save(model_file)
+ 
+        print('testing model for network_depth: ' + str(network_depth))
+        avg_all = evaluate_model_score(model, testData)
+        results[results_it] = (network_depth, avg_all)
+        results_it = results_it + 1
+        np.save('test_network_depth/results.npy', results)
+       
+    # plot
+    fig, ax = plt.subplots()
+    width = 0.35
+    ax.bar(results[:,0], results[:,1], width, color='b')
+    ax.set_xticks(np.arange(1, 5) + width / 2)
+    ax.set_xticklabels(('1', '2', '3', '4'))
+    
+    plt.xlabel('Network Depth')
+    plt.ylabel('RMSE (Kelvin)')
+    plt.ylim([0.6, 0.85])
+    plt.title('Network Depth')
+    plt.savefig("test_network_depth/plot.png")
+    plt.show()
+    
+def test_network_activation():
+    ''' 
+        trains several networks with different activation layers
+    '''
+    train_params = AttrDict()
+    train_params.window_size = 12
+    train_params.lat = 47.25
+    train_params.lon = 189.0
+    train_params.npoints = 25
+    train_params.grib_folder = '/media/isa/VIS1/temperature/'
+    train_params.months = [6,7,8]
+
+    network_activation_list = ('softmax', 'elu', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear')
+    results = np.zeros((len(network_activation_list)))
+    results_it = 0
+    
+    # load data
+    train_params.years = [2000,2001,2002]
+    trainData = DatasetNearest(train_params)
+    
+    train_params.years = [2003]
+    testData = DatasetNearest(train_params)
+
+    #train and save the model files
+    print ('training started...')
+    for network_activation in network_activation_list:
+
+        model_file = 'test_network_activation/model_na_' + network_activation + '.h5'
+        
+        # create and fit the LSTM network
+        print('creating model for network_activation: ' + network_activation)
+        model = create_model_activation(train_params.window_size, trainData.vector_size, train_params.npoints, network_activation)
+        train_model(model, trainData, 20)
+        model.save(model_file)
+ 
+        print('testing model for network_activation: ' + network_activation)
+        avg_all = evaluate_model_score(model, testData)
+        results[results_it] = avg_all
+        results_it = results_it + 1
+        np.save('test_network_activation/results.npy', results)
+       
+    # plot
+    fig, ax = plt.subplots()
+    fig.set_size_inches(12, 6, forward=True)
+    width = 0.35
+    ind = np.arange(len(network_activation_list))
+    rects = ax.bar(ind, results, width, color='b')
+    ax.set_xticks(ind + width / 2)
+    ax.set_xticklabels(network_activation_list)
+
+    for rect in rects:
+        height = rect.get_height()
+        ax.text(rect.get_x() + rect.get_width()/2., 1.05*height,
+                '%.2f' % height,
+                ha='center', va='bottom')
+    
+    plt.xlabel('Network Activation')
+    plt.ylabel('RMSE (Kelvin)')
+    plt.ylim([0.6, 0.9])
+    plt.title('Network Activation')
+    plt.savefig("test_network_activation/plot2.png")
+    plt.show()
+    
+def test_forecast_distance():
+    ''' 
+        testing how well the network can predict
+        n >= 1 steps into the future
+        compare: recursive vs model
+    '''
+    train_params = AttrDict()
+    train_params.window_size = 30
+    train_params.lat = 47.25
+    train_params.lon = 189.0
+    train_params.npoints = 25
+    train_params.grib_folder = '/media/isa/VIS1/temperature/'
+    train_params.months = [1,2,3,4,5,6,7,8,9,10,11,12]
+    train_params.years = [2000,2001,2002]
+
+    forecast_distance_list = [1,2,3,4,5,6,7,8]
+
+    #train and save the model files
+    print ('training started...')
+    for forecast_distance in forecast_distance_list:
+
+        model_file = 'test_forecast_distance_2/model_fd_' + str(forecast_distance) + '.h5'
+        train_params.forecast_distance = forecast_distance
+        trainData = DatasetNearest(train_params)
+        
+        # create and fit the LSTM network
+        print('creating model for forecast_distance: ' + str(forecast_distance))
+        model = create_model(train_params.window_size, trainData.vector_size, train_params.npoints * 2)
+        train_model(model, trainData, 20)
+        model.save(model_file)
+        
+def evaluate_forecast_distance():
+    ''' 
+        testing how well the network can predict
+        n >= 1 steps into the future
+        compare: recursive vs model
+    '''
+    window_size = 30
+    test_params = AttrDict()
+    test_params.window_size = window_size
+    test_params.lat = 47.25
+    test_params.lon = 189.0
+    test_params.npoints = 25
+    test_params.grib_folder = '/media/isa/VIS1/temperature/'
+    test_params.months = [1]
+    test_params.years = [2003]
+
+    results_count = 10
+    forecast_distance_list = [1,2,3,4,5,6,7,8]
+    results = np.empty((len(forecast_distance_list), results_count, 2))
+    window_before = np.empty((results_count, window_size))
+
+    it = 0
+    for forecast_distance in forecast_distance_list:
+
+        model_file = 'test_forecast_distance_2/model_fd_' + str(forecast_distance) + '.h5'
+        test_params.forecast_distance = forecast_distance
+        dataset = DatasetNearest(test_params)
+        
+        # load the trained model
+        model = load_model(model_file)
+        
+        # make predictions
+        predict = model.predict(dataset.dataX)
+   
+        # invert predictions
+        predict = dataset.scaler.inverse_transform(predict)
+        dataY = dataset.scaler.inverse_transform(dataset.dataY)
+        
+        results[it,:,0] = predict[:results_count, 0]
+        results[it,:,1] = dataY[:results_count, 0]
+        it = it + 1
+        
+        # invert dataX
+        dataX = np.empty(dataset.dataX.shape)
+        for i in range(dataset.dataX.shape[0]):
+            dataX[i] = dataset.scaler.inverse_transform(dataset.dataX[i])
+            
+        window_before[:] = dataX[:results_count, :, 0]
+  
+    np.save('test_forecast_distance_2/window_before.npy', window_before)
+    np.save('test_forecast_distance_2/results.npy', results)
+    
+    # plot
+    nan_array = np.empty((window_size - 1))
+    nan_array.fill(np.nan)
+    nan_array2 = np.empty((len(forecast_distance_list)))
+    nan_array2.fill(np.nan)
+    ind = np.arange(window_size + len(forecast_distance_list))
+    
+    for i in range(results.shape[1]):
+        plt.cla()
+        fig, ax = plt.subplots()
+
+        forecasts = np.concatenate((nan_array, window_before[i, -1:], results[:, i, 0]))
+        ground_truth = np.concatenate((nan_array, window_before[i, -1:], results[:, i, 1]))
+        network_input = np.concatenate((window_before[i, :], nan_array2))
+     
+        ax.plot(ind, network_input, 'b-x', label='Network input')
+        ax.plot(ind, forecasts, 'r-x', label='Forecast')
+        ax.plot(ind, ground_truth, 'g-x', label = 'Ground Truth')
+
+        start_date = dataset.frames_data[dataset.frames_idx[i + window_size]]
+        end_date = dataset.frames_data[dataset.frames_idx[i + window_size + dataset.params.forecast_distance - 1]]
+        
+        start_date_s = start_date.date + '-' + start_date.time
+        end_date_s = end_date.date + '-' + end_date.time
+        
+        plt.xlabel('Time (6h steps)')
+        plt.ylabel('Temperature (Kelvin)')
+        plt.title('Multiple Steps Forecast (' + start_date_s + ' -- ' + end_date_s + ')')
+        plt.legend(loc='upper right')
+        plt.savefig("test_forecast_distance_2/plot" + str(i) + ".png")
+        
+    
+def draw_fd_plot():
+    window_size = 12
+    forecast_distance_list = [1,2,3,4,5,6,7,8]
+    results = np.load('test_forecast_distance/results.npy')
+    window_before = np.load('test_forecast_distance/window_before.npy')
+
+    
+    
 
 def main():
     #test_nb_features()
     #test_nb_neurons()
-    test_window_size()
+    #test_window_size()
+    #test_network_depth()
+    #test_network_activation()
+    #test_forecast_distance()
+    evaluate_forecast_distance()
+    #draw_fd_plot()
     return 1
 
 if __name__ == "__main__":

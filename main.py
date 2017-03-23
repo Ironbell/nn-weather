@@ -54,17 +54,7 @@ def display():
     score = np.load('score.npy')
     display_score(score)
 
-def main():
-    '''model = load_model('weather_model.h5')
-    for weight in model.get_weights():
-        print(weight.shape)
-    return 1'''
-    
-    model = create_model(1, 28, 200)
-    for weight in model.get_weights():
-        print(weight.shape)
-    return 1
-    
+def main():    
     config = json.loads(open(sys.argv[1]).read())
     print(config)
 

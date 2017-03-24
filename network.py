@@ -108,6 +108,20 @@ def train_model(model, dataset, epoch_count):
     
     model.fit(dataset.dataX, dataset.dataY, batch_size=2, nb_epoch=epoch_count, validation_split=0.05)
     
+def predict_multiple(model, dataset, steps_ahead):
+    ''' 
+        predicts multiple steps ahead
+        @return predict array of shape (nb_samples, steps_ahead, nb_features)
+    '''
+    predict = np.empty((dataset.dataX.shape[0], steps_ahead, dataset.dataX.shape[2]))
+    for sample in range(dataset.dataX.shape[0]):
+        toPredict = dataset.dataX[sample:sample+1, :, :]
+        for step in range(steps_ahead):
+            predict[sample, step, :] = model.predict(toPredict)
+            toPredict = np.concatenate((toPredict[:, 1:, :], predict[sample:sample+1, step:step+1, :]), axis=1)
+
+    return predict
+    
 def evaluate_model(model, dataset, data_type=''):
     """ 
         evaluates the model given the dataset (training or test data)

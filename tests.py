@@ -346,6 +346,7 @@ def evaluate_forecast_distance():
     results = np.empty((len(forecast_distance_list), results_count, 2))
     window_before = np.empty((results_count, window_size))
 
+    # evaluate how the individual models do
     it = 0
     for forecast_distance in forecast_distance_list:
 
@@ -373,10 +374,21 @@ def evaluate_forecast_distance():
             dataX[i] = dataset.scaler.inverse_transform(dataset.dataX[i])
             
         window_before[:] = dataX[:results_count, :, 0]
-  
+     
     np.save('test_forecast_distance_2/window_before.npy', window_before)
     np.save('test_forecast_distance_2/results.npy', results)
-    
+     
+    # evaluate how the single model does
+    model_file = 'test_forecast_distance_2/model_fd_1.h5'
+    test_params.forecast_distance = 1
+    dataset = DatasetNearest(test_params)
+        
+    # load the trained model
+    model = load_model(model_file)
+    predict_m = predict_multiple(model, dataset, forecast_distance_list[-1])
+    for i in range(predict_m.shape[0]):
+        predict_m[i] = dataset.scaler.inverse_transform(predict_m[i])
+
     # plot
     nan_array = np.empty((window_size - 1))
     nan_array.fill(np.nan)
@@ -389,12 +401,14 @@ def evaluate_forecast_distance():
         fig, ax = plt.subplots()
 
         forecasts = np.concatenate((nan_array, window_before[i, -1:], results[:, i, 0]))
+        forecasts_multiple = np.concatenate((nan_array, window_before[i, -1:], predict_m[i, :, 0]))
         ground_truth = np.concatenate((nan_array, window_before[i, -1:], results[:, i, 1]))
         network_input = np.concatenate((window_before[i, :], nan_array2))
      
         ax.plot(ind, network_input, 'b-x', label='Network input')
-        ax.plot(ind, forecasts, 'r-x', label='Forecast')
-        ax.plot(ind, ground_truth, 'g-x', label = 'Ground Truth')
+        ax.plot(ind, forecasts_multiple, 'm-x', label='Recursive model forecast')
+        ax.plot(ind, forecasts, 'r-x', label='Individual model forecast')
+        ax.plot(ind, ground_truth, 'g-x', label = 'Ground truth')
 
         start_date = dataset.frames_data[dataset.frames_idx[i + window_size]]
         end_date = dataset.frames_data[dataset.frames_idx[i + window_size + dataset.params.forecast_distance - 1]]

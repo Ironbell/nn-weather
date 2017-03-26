@@ -149,10 +149,10 @@ class Dataset:
         forecast_distance = self.params.forecast_distance
 
         dataX, dataY = [], []
-        for i in range(len(dataset) - window_size - forecast_distance):
+        for i in range(len(dataset) - window_size - forecast_distance - 1):
             a = dataset[i:(i + window_size), :]
             dataX.append(a)
-            dataY.append(dataset[i + window_size + forecast_distance - 1, :])
+            dataY.append(dataset[(i + window_size):(i + window_size + forecast_distance), :])
         return np.array(dataX), np.array(dataY)
     
     def create_samples(self):

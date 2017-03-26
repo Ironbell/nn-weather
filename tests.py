@@ -422,15 +422,65 @@ def evaluate_forecast_distance():
         plt.legend(loc='upper right')
         plt.savefig("test_forecast_distance_2/plot" + str(i) + ".png")
         
-    
-def draw_fd_plot():
-    window_size = 12
-    forecast_distance_list = [1,2,3,4,5,6,7,8]
-    results = np.load('test_forecast_distance/results.npy')
-    window_before = np.load('test_forecast_distance/window_before.npy')
+def test_many_to_many():
+    ''' 
+        testing how well the network can predict
+        in a many to many scenario 
+    '''
+    train_params = AttrDict()
+    train_params.window_size = 30
+    train_params.lat = 47.25
+    train_params.lon = 189.0
+    train_params.npoints = 25
+    train_params.grib_folder = '/media/isa/VIS1/temperature/'
+    train_params.months = [1,2,3,4,5,6,7,8,9,10,11,12]
+    train_params.years = [2000,2001,2002]
+    train_params.forecast_distance = 8
 
-    
-    
+    #train and save the model files
+    print ('training started...')
+    model_folder = 'test_many_to_many/model'
+    trainData = DatasetNearest(train_params)
+        
+    # create and fit the LSTM network
+    print('creating model...')
+    model = create_model(train_params.window_size, train_params.forecast_distance, trainData.vector_size, train_params.npoints * 2)
+    train_model(model, trainData, 200, model_folder)
+
+    # evaluate
+    train_params.years = [2003]
+    testData = DatasetNearest(train_params)
+    predict = model.predict(testData.dataX)
+
+    # plot
+    nan_array = np.empty((testData.params.window_size - 1))
+    nan_array.fill(np.nan)
+    nan_array2 = np.empty(train_params.forecast_distance)
+    nan_array2.fill(np.nan)
+    ind = np.arange(testData.params.window_size + train_params.forecast_distance)
+
+    for i in range(10):
+        plt.cla()
+        fig, ax = plt.subplots()
+        forecasts = np.concatenate((nan_array, testData.dataX[i, -1:, 0], predict[i, :, 0]))
+        ground_truth = np.concatenate((nan_array, testData.dataX[i, -1:, 0], testData.dataY[i, :, 0]))
+        network_input = np.concatenate((testData.dataX[i, :, 0], nan_array2))
+     
+        ax.plot(ind, network_input, 'b-x', label='Network input')
+        ax.plot(ind, forecasts, 'r-x', label='Many to many model forecast')
+        ax.plot(ind, ground_truth, 'g-x', label = 'Ground truth')
+
+        start_date = testData.frames_data[testData.frames_idx[i + testData.params.window_size]]
+        end_date = testData.frames_data[testData.frames_idx[i + testData.params.window_size + testData.params.forecast_distance - 1]]
+        
+        start_date_s = start_date.date + '-' + start_date.time
+        end_date_s = end_date.date + '-' + end_date.time
+        
+        plt.xlabel('Time (6h steps)')
+        plt.ylabel('Temperature (Kelvin)')
+        plt.title('Many to Many Forecast (' + start_date_s + ' -- ' + end_date_s + ')')
+        plt.legend(loc='upper right')
+        plt.savefig("test_many_to_many/plot" + str(i) + ".png")
 
 def main():
     #test_nb_features()
@@ -439,8 +489,9 @@ def main():
     #test_network_depth()
     #test_network_activation()
     #test_forecast_distance()
-    evaluate_forecast_distance()
+    #evaluate_forecast_distance()
     #draw_fd_plot()
+    test_many_to_many()
     return 1
 
 if __name__ == "__main__":

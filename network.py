@@ -3,44 +3,26 @@ np.random.seed(1337)
 import matplotlib.pyplot as plt
 
 from keras.models import Sequential
-from keras.callbacks import Callback, ModelCheckpoint
 from keras.layers import Dense, Activation, LSTM, Dropout, RepeatVector, TimeDistributed
 from sklearn.metrics import mean_squared_error
 
 from dataset import *
 
-class EarlyStoppingByLossVal(Callback):
-    def __init__(self, monitor='val_loss', value=0.00001, verbose=0):
-        super(Callback, self).__init__()
-        self.monitor = monitor
-        self.value = value
-        self.verbose = verbose
-
-    def on_epoch_end(self, epoch, logs={}):
-        current = logs.get(self.monitor)
-        if current is None:
-            warnings.warn('Early stopping requires %s available!' % self.monitor, RuntimeWarning)
-
-        if current < self.value:
-            if self.verbose > 0:
-                print('Epoch %05d: early stopping THR' % epoch)
-            self.model.stop_training = True
-
-def create_model(n_pre, n_post, feature_count, hidden_neurons):
+def create_model(steps_before, steps_after, feature_count, hidden_neurons):
     """ 
         creates, compiles and returns a RNN model 
-        @param n_pre: the number of previous time steps (input)
-        @param n_post: the number of posterior time steps (output or predictions)
+        @param steps_before: the number of previous time steps (input)
+        @param steps_after: the number of posterior time steps (output or predictions)
         @param feature_count: the number of features in the model
         @param hidden_neurons: the number of hidden neurons per LSTM layer
     """
-    DROPOUT = 0.2
+    DROPOUT = 0.5
     LAYERS = 2
     
     model = Sequential()  
-    model.add(LSTM(hidden_neurons, input_shape=(n_pre, feature_count), return_sequences=False))  
+    model.add(LSTM(hidden_neurons, input_shape=(steps_before, feature_count)))  
     model.add(Dropout(DROPOUT))
-    model.add(RepeatVector(n_post))
+    model.add(RepeatVector(steps_after))
     for _ in range(LAYERS):
         model.add(LSTM(hidden_neurons, return_sequences=True))
         model.add(Dropout(DROPOUT))
@@ -62,20 +44,13 @@ def train_model(model, dataset, epoch_count, model_folder):
         TODO: maybe specify if the model needs to be saved between epochs?
         TODO: maybe specify a target validation loss? (monitor='val_loss')
     """
-    
-    '''callbacks = [
-        EarlyStoppingByLossVal(monitor='loss', value=0.001, verbose=1),
-        ModelCheckpoint(kfold_weights_path, monitor='loss', save_best_only=True, verbose=0),
-    ]'''
-    
     history = model.fit(dataset.dataX, dataset.dataY, batch_size=2, nb_epoch=epoch_count, validation_split=0.05)
     
     if not os.path.exists(model_folder):
         os.makedirs(model_folder)
 
     model.save(model_folder + '/model.h5')
-    print(history.history.keys())
-    
+
     # plot training and val loss/accuracy
     # summarize history for accuracy
     plt.plot(history.history['acc'])
@@ -97,17 +72,16 @@ def train_model(model, dataset, epoch_count, model_folder):
     plt.savefig(model_folder + '/history_loss.png')
     plt.cla()
 
-    
-def predict_multiple(model, dataset, steps_ahead):
+def predict_multiple(model, dataset, steps_after):
     ''' 
         predicts multiple steps ahead
-        @return predict array of shape (nb_samples, steps_ahead, nb_features)
+        @return predict array of shape (nb_samples, steps_after, nb_features)
     '''
-    predict = np.empty((dataset.dataX.shape[0], steps_ahead, dataset.dataX.shape[2]))
+    predict = np.empty((dataset.dataX.shape[0], steps_after, dataset.dataX.shape[2]))
     for sample in range(dataset.dataX.shape[0]):
         toPredict = dataset.dataX[sample:sample+1, :, :]
-        for step in range(steps_ahead):
-            predict[sample, step, :] = model.predict(toPredict)
+        for step in range(steps_after):
+            predict[sample, step:step+1, :] = model.predict(toPredict)
             toPredict = np.concatenate((toPredict[:, 1:, :], predict[sample:sample+1, step:step+1, :]), axis=1)
 
     return predict
@@ -145,27 +119,32 @@ def evaluate_model_score(model, dataset):
         the avg mean squared error.
         @param model: the model to evaluate_model
         @param dataset: data to evaluate
-        @param data_type: type of the data (string) for debug outputs
-        arithmetic mean RMSE, std of RMSE
+        @return arithmetic mean RMSE, std of RMSE, each one per timestep and per feature, shape is (timestep, feature, [0=rmse, 1=mad])
     """
     # make predictions
-    predict = model.predict(dataset.dataX)
-   
-    # invert predictions
-    predict = dataset.scaler.inverse_transform(predict)
-    dataY = dataset.scaler.inverse_transform(dataset.dataY)
-  
-     # calculate root mean squared error
-    scores = np.empty((dataY.shape[1]))
-    for i in range(dataY.shape[1]):
-        scores[i] = math.sqrt(mean_squared_error(dataY[:,i], predict[:,i]))
-    
-    avg = np.mean(scores)
-    std = np.std(scores)
-    print(data_type + ' Score mean: %.2f RMSE' % avg)    
-    print(data_type + ' Score std: %.2f RMSE' % std) 
+    predict = dataset.predict_data(model)
+    _, dataY = dataset.inverse_transform_data()
 
-    return avg, std
+    return evaluate_model_score_raw(dataY, predict)
+    
+def evaluate_model_score_raw(dataY, predict):
+    """ 
+        evaluates the model given the dataset and the prediction (both already scaled)
+        @param dataY: dataY from the dataset
+        @param predict: already predicted data
+        @return arithmetic mean RMSE, std of RMSE, each one per timestep and per feature, shape is (timestep, feature, [0=rmse, 1=mad])
+    """
+    # calculate root mean squared error and
+    # mean absolute deviation
+    # scores are (timestep, feature, [0=rmse, 1=mad])
+    scores = np.empty((dataY.shape[1], dataY.shape[2], 2))
+    for i in range(dataY.shape[1]): # loop over timesteps
+        for j in range(dataY.shape[2]): # loop over features
+            scores[i, j, 0] = math.sqrt(mean_squared_error(dataY[:,i,j], predict[:,i,j]))
+            errors = np.absolute(dataY[:,i,j] - predict[:,i,j])
+            scores[i, j, 0] = np.mean(np.absolute(errors - np.mean(errors, axis=0)), axis=0)
+
+    return scores
     
 def evaluate_model_score_2(model, dataset):
     """ 
@@ -182,7 +161,8 @@ def evaluate_model_score_2(model, dataset):
     predict = dataset.scaler.inverse_transform(predict)
     dataY = dataset.scaler.inverse_transform(dataset.dataY)
  
-    # calculate root mean squared error
+    # calculate root mean squared error and
+
     scores = []
     for i in range(dataY.shape[1]):
         scores.append(math.sqrt(mean_squared_error(dataY[:,i], predict[:,i])))

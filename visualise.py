@@ -5,16 +5,16 @@ from dataset import *
 import colormap as cm
 
 def plot_predictions(dataset, trainPredict, testPredict):
-    window_size = dataset.params.window_size
+    steps_before = dataset.params.steps_before
     # shift train predictions for plotting
     trainPredictPlot = np.empty_like(dataset.frames)
     trainPredictPlot[:, :] = np.nan
-    trainPredictPlot[window_size:len(trainPredict) + window_size, :] = trainPredict[:,:]
+    trainPredictPlot[steps_before:len(trainPredict) + steps_before, :] = trainPredict[:,:]
     
     # shift test predictions for plotting
     testPredictPlot = np.empty_like(dataset.frames)
     testPredictPlot[:, :] = np.nan
-    testPredictPlot[len(trainPredict) + (window_size * 2) + 1:len(dataset.frames)-1, :] = testPredict[:,:]
+    testPredictPlot[len(trainPredict) + (steps_before * 2) + 1:len(dataset.frames)-1, :] = testPredict[:,:]
     
     # plot baseline and predictions
     plt.plot(dataset.scaler.inverse_transform(dataset.frames))
@@ -23,7 +23,7 @@ def plot_predictions(dataset, trainPredict, testPredict):
     plt.show()
     
 def plot_predictions_images(dataset, predict, folder_name, max_frames):
-    window_size = dataset.params.window_size
+    steps_before = dataset.params.steps_before
     
     # calculate lat and lon for axis scaling
     nelat = round_nearest(dataset.params.end_lat, GRID_SIZE)
@@ -37,11 +37,11 @@ def plot_predictions_images(dataset, predict, folder_name, max_frames):
     colmap = cm.YlOrRd()
 
     for i in range(min(max_frames, len(predict))):
-        fig, axes = plt.subplots(nrows=1, ncols=window_size + 2)
-        fig.set_size_inches((window_size + 2) * 6, 5, forward=True)
+        fig, axes = plt.subplots(nrows=1, ncols=steps_before + 2)
+        fig.set_size_inches((steps_before + 2) * 6, 5, forward=True)
         
         # plot trajectory
-        for axis_nr in range(window_size):
+        for axis_nr in range(steps_before):
             ax = axes.flat[axis_nr]
             ax.text(nslon + 0.5, nslat + 0.25, 'Inital trajectory', fontsize=10, color='w')
             toplot = np.reshape(dataset.dataX[i,axis_nr,:], (lat_range, -1))
@@ -50,10 +50,10 @@ def plot_predictions_images(dataset, predict, folder_name, max_frames):
                 dataset.frames_data[dataset.frames_idx[i + axis_nr]].time)
             im = ax.imshow(toplot, cmap=colmap, extent=[nslon,nelon,nslat,nelat])
 
-        next_date = dataset.frames_data[dataset.frames_idx[i + window_size + dataset.params.forecast_distance - 1]]
+        next_date = dataset.frames_data[dataset.frames_idx[i + steps_before + dataset.params.forecast_distance - 1]]
         
         # plot prediction
-        ax = axes.flat[window_size]
+        ax = axes.flat[steps_before]
         ax.text(nslon + 0.5, nslat + 0.25, 'Prediction', fontsize=10, color='w')
         toplot = np.reshape(predict[i,:], (lat_range, -1))
         ax.tick_params(labelsize=6)
@@ -61,7 +61,7 @@ def plot_predictions_images(dataset, predict, folder_name, max_frames):
         im = ax.imshow(toplot, cmap=colmap, extent=[nslon,nelon,nslat,nelat])
         
         # plot ground truth 
-        ax = axes.flat[window_size + 1]
+        ax = axes.flat[steps_before + 1]
         plt.text(nslon + 0.5, nslat + 0.25, 'Ground truth', fontsize=10, color='w')
         toplot = np.reshape(dataset.dataY[i,:], (lat_range, -1))
         ax.tick_params(labelsize=6)

@@ -13,7 +13,7 @@ def test_nb_features():
         compares and visualises the prediction error
     '''
     train_params = AttrDict()
-    train_params.window_size = 8
+    train_params.steps_before = 8
     train_params.grib_folder = '/media/isa/VIS1/temperature/'
     train_params.months = [6,7,8]
     epoch_count = 10
@@ -38,7 +38,7 @@ def test_nb_features():
         
         # create and fit the LSTM network
         print('creating model for features: ' + str(nb_features))
-        model = create_model(train_params.window_size, nb_features, nb_features * 10)
+        model = create_model(train_params.steps_before, nb_features, nb_features * 10)
         train_model(model, trainData, epoch_count)
         model.save(model_file)
         
@@ -70,7 +70,7 @@ def test_nb_neurons():
         compares and visualises the prediction error
     '''
     train_params = AttrDict()
-    train_params.window_size = 8
+    train_params.steps_before = 8
     train_params.start_lat = 45.839
     train_params.end_lat = 47.74
     train_params.start_lon = 186.10
@@ -100,7 +100,7 @@ def test_nb_neurons():
         
         # create and fit the LSTM network
         print('creating model for neurons: ' + str(nb_neurons))
-        model = create_model(train_params.window_size, trainData.vector_size, nb_neurons)
+        model = create_model(train_params.steps_before, trainData.vector_size, nb_neurons)
         train_model(model, trainData, epoch_count)
         model.save(model_file)
  
@@ -120,7 +120,7 @@ def test_nb_neurons():
     plt.savefig("test_nb_neurons/plot.png")
     plt.show()
     
-def test_window_size():
+def test_steps_before():
     ''' 
         trains a network with different window sizes
         compares and visualises the prediction error
@@ -135,36 +135,36 @@ def test_window_size():
     
     epoch_count = 30
 
-    window_size_list = list(range(1, 20 + 1))
+    steps_before_list = list(range(1, 20 + 1))
 
-    results = np.zeros((len(window_size_list), 2))
+    results = np.zeros((len(steps_before_list), 2))
     results_it = 0
 
     #train and save the model files
     print ('training started...')
-    for window_size in window_size_list:
+    for steps_before in steps_before_list:
         
         # load data
-        train_params.window_size = window_size
+        train_params.steps_before = steps_before
         train_params.years = [2000,2001,2002]
         trainData = DatasetArea(train_params)
         
         train_params.years = [2003]
         testData = DatasetArea(train_params)
        
-        model_file = 'test_window_size/model_ws_' + str(window_size) + '.h5'
+        model_file = 'test_steps_before/model_ws_' + str(steps_before) + '.h5'
         
         # create and fit the LSTM network
-        print('creating model for window_size: ' + str(window_size))
-        model = create_model(train_params.window_size, trainData.vector_size, 100)
+        print('creating model for steps_before: ' + str(steps_before))
+        model = create_model(train_params.steps_before, trainData.vector_size, 100)
         train_model(model, trainData, epoch_count)
         model.save(model_file)
  
-        print('testing model for window_size: ' + str(window_size))
+        print('testing model for steps_before: ' + str(steps_before))
         avg_all = evaluate_model_score(model, testData)
-        results[results_it] = (window_size, avg_all)
+        results[results_it] = (steps_before, avg_all)
         results_it = results_it + 1
-        np.save('test_window_size/results.npy', results)
+        np.save('test_steps_before/results.npy', results)
        
     # plot
     plt.plot(results[:,0], results[:,1])
@@ -173,7 +173,7 @@ def test_window_size():
     plt.ylabel('RMSE (Kelvin)')
     plt.title('Window Size')
     plt.grid(True)
-    plt.savefig("test_window_size/plot.png")
+    plt.savefig("test_steps_before/plot.png")
     plt.show()
     
 def test_network_depth():
@@ -181,7 +181,7 @@ def test_network_depth():
         trains several networks with different number of LSTM layers
     '''
     train_params = AttrDict()
-    train_params.window_size = 12
+    train_params.steps_before = 12
     train_params.lat = 47.25
     train_params.lon = 189.0
     train_params.npoints = 25
@@ -207,7 +207,7 @@ def test_network_depth():
         
         # create and fit the LSTM network
         print('creating model for network_depth: ' + str(network_depth))
-        model = create_deep_model(train_params.window_size, trainData.vector_size, train_params.npoints, network_depth)
+        model = create_deep_model(train_params.steps_before, trainData.vector_size, train_params.npoints, network_depth)
         train_model(model, trainData, 50 * network_depth)
         model.save(model_file)
  
@@ -236,7 +236,7 @@ def test_network_activation():
         trains several networks with different activation layers
     '''
     train_params = AttrDict()
-    train_params.window_size = 12
+    train_params.steps_before = 12
     train_params.lat = 47.25
     train_params.lon = 189.0
     train_params.npoints = 25
@@ -262,7 +262,7 @@ def test_network_activation():
         
         # create and fit the LSTM network
         print('creating model for network_activation: ' + network_activation)
-        model = create_model_activation(train_params.window_size, trainData.vector_size, train_params.npoints, network_activation)
+        model = create_model_activation(train_params.steps_before, trainData.vector_size, train_params.npoints, network_activation)
         train_model(model, trainData, 20)
         model.save(model_file)
  
@@ -301,7 +301,7 @@ def test_forecast_distance():
         compare: recursive vs model
     '''
     train_params = AttrDict()
-    train_params.window_size = 30
+    train_params.steps_before = 30
     train_params.lat = 47.25
     train_params.lon = 189.0
     train_params.npoints = 25
@@ -321,7 +321,7 @@ def test_forecast_distance():
         
         # create and fit the LSTM network
         print('creating model for forecast_distance: ' + str(forecast_distance))
-        model = create_model(train_params.window_size, trainData.vector_size, train_params.npoints * 2)
+        model = create_model(train_params.steps_before, trainData.vector_size, train_params.npoints * 2)
         train_model(model, trainData, 20)
         model.save(model_file)
         
@@ -331,9 +331,9 @@ def evaluate_forecast_distance():
         n >= 1 steps into the future
         compare: recursive vs model
     '''
-    window_size = 30
+    steps_before = 30
     test_params = AttrDict()
-    test_params.window_size = window_size
+    test_params.steps_before = steps_before
     test_params.lat = 47.25
     test_params.lon = 189.0
     test_params.npoints = 25
@@ -344,7 +344,7 @@ def evaluate_forecast_distance():
     results_count = 10
     forecast_distance_list = [1,2,3,4,5,6,7,8]
     results = np.empty((len(forecast_distance_list), results_count, 2))
-    window_before = np.empty((results_count, window_size))
+    window_before = np.empty((results_count, steps_before))
 
     # evaluate how the individual models do
     it = 0
@@ -390,11 +390,11 @@ def evaluate_forecast_distance():
         predict_m[i] = dataset.scaler.inverse_transform(predict_m[i])
 
     # plot
-    nan_array = np.empty((window_size - 1))
+    nan_array = np.empty((steps_before - 1))
     nan_array.fill(np.nan)
     nan_array2 = np.empty((len(forecast_distance_list)))
     nan_array2.fill(np.nan)
-    ind = np.arange(window_size + len(forecast_distance_list))
+    ind = np.arange(steps_before + len(forecast_distance_list))
     
     for i in range(results.shape[1]):
         plt.cla()
@@ -410,8 +410,8 @@ def evaluate_forecast_distance():
         ax.plot(ind, forecasts, 'r-x', label='Individual model forecast')
         ax.plot(ind, ground_truth, 'g-x', label = 'Ground truth')
 
-        start_date = dataset.frames_data[dataset.frames_idx[i + window_size]]
-        end_date = dataset.frames_data[dataset.frames_idx[i + window_size + dataset.params.forecast_distance - 1]]
+        start_date = dataset.frames_data[dataset.frames_idx[i + steps_before]]
+        end_date = dataset.frames_data[dataset.frames_idx[i + steps_before + dataset.params.forecast_distance - 1]]
         
         start_date_s = start_date.date + '-' + start_date.time
         end_date_s = end_date.date + '-' + end_date.time
@@ -422,76 +422,16 @@ def evaluate_forecast_distance():
         plt.legend(loc='upper right')
         plt.savefig("test_forecast_distance_2/plot" + str(i) + ".png")
         
-def test_many_to_many():
-    ''' 
-        testing how well the network can predict
-        in a many to many scenario 
-    '''
-    train_params = AttrDict()
-    train_params.window_size = 30
-    train_params.lat = 47.25
-    train_params.lon = 189.0
-    train_params.npoints = 25
-    train_params.grib_folder = '/media/isa/VIS1/temperature/'
-    train_params.months = [1,2,3,4,5,6,7,8,9,10,11,12]
-    train_params.years = [2000,2001,2002]
-    train_params.forecast_distance = 8
-
-    #train and save the model files
-    print ('training started...')
-    model_folder = 'test_many_to_many/model'
-    trainData = DatasetNearest(train_params)
-        
-    # create and fit the LSTM network
-    print('creating model...')
-    model = create_model(train_params.window_size, train_params.forecast_distance, trainData.vector_size, train_params.npoints * 2)
-    train_model(model, trainData, 200, model_folder)
-
-    # evaluate
-    train_params.years = [2003]
-    testData = DatasetNearest(train_params)
-    predict = model.predict(testData.dataX)
-
-    # plot
-    nan_array = np.empty((testData.params.window_size - 1))
-    nan_array.fill(np.nan)
-    nan_array2 = np.empty(train_params.forecast_distance)
-    nan_array2.fill(np.nan)
-    ind = np.arange(testData.params.window_size + train_params.forecast_distance)
-
-    for i in range(10):
-        plt.cla()
-        fig, ax = plt.subplots()
-        forecasts = np.concatenate((nan_array, testData.dataX[i, -1:, 0], predict[i, :, 0]))
-        ground_truth = np.concatenate((nan_array, testData.dataX[i, -1:, 0], testData.dataY[i, :, 0]))
-        network_input = np.concatenate((testData.dataX[i, :, 0], nan_array2))
-     
-        ax.plot(ind, network_input, 'b-x', label='Network input')
-        ax.plot(ind, forecasts, 'r-x', label='Many to many model forecast')
-        ax.plot(ind, ground_truth, 'g-x', label = 'Ground truth')
-
-        start_date = testData.frames_data[testData.frames_idx[i + testData.params.window_size]]
-        end_date = testData.frames_data[testData.frames_idx[i + testData.params.window_size + testData.params.forecast_distance - 1]]
-        
-        start_date_s = start_date.date + '-' + start_date.time
-        end_date_s = end_date.date + '-' + end_date.time
-        
-        plt.xlabel('Time (6h steps)')
-        plt.ylabel('Temperature (Kelvin)')
-        plt.title('Many to Many Forecast (' + start_date_s + ' -- ' + end_date_s + ')')
-        plt.legend(loc='upper right')
-        plt.savefig("test_many_to_many/plot" + str(i) + ".png")
-
 def main():
     #test_nb_features()
     #test_nb_neurons()
-    #test_window_size()
+    #test_steps_before()
     #test_network_depth()
     #test_network_activation()
     #test_forecast_distance()
     #evaluate_forecast_distance()
     #draw_fd_plot()
-    test_many_to_many()
+    #test_many_to_many()
     return 1
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 {
     "action" : "train",
-    "window_size" : 8,
+    "steps_before" : 8,
+    "steps_after" : 1,
     "epoch_count" : 2,
     "start_lat" : 45.839803,
     "end_lat" : 47.749943,
@@ -9,5 +10,5 @@
     "grib_folder" : "/media/isa/VIS1/temperature/",
     "years" : [2000, 2001],
     "months" : [6, 7, 8],
-    "model_file" : "model_test.h5"
+    "model_folder" : "model_test"
 }

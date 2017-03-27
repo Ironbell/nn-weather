@@ -1,6 +1,7 @@
 {
     "action" : "evaluate",
-    "window_size" : 8,
+    "steps_before" : 8,
+    "steps_after" : 1,
     "max_frames" : 20,
     "start_lat" : 45.839803,
     "end_lat" : 47.749943,
@@ -9,5 +10,5 @@
     "grib_folder" : "/media/isa/VIS1/temperature/",
     "years" : [2016],
     "months" : [6],
-    "model_file" : "weather_model.h5"
+    "model_folder" : "weather_model"
 }

@@ -77,86 +77,91 @@ class Dataset:
         """ 
             Checks the parameters for validity
         """
-        raise NotImplementedError()
+        if not hasattr(params, 'forecast_distance'):
+            params.forecast_distance = 0
+            
+        if params.forecast_distance < 0:
+            raise Exception("forecast distance must be at least 0")
+            
+        if not hasattr(params, 'steps_before'):
+            params.steps_before = 1
+            
+        if params.steps_before < 1:
+            raise Exception("steps before must be at least 1")
+            
+        if not hasattr(params, 'steps_after'):
+            params.steps_after = 1
+            
+        if params.steps_after < 1:
+            raise Exception("steps ahead must be at least 1")
+            
+        if not hasattr(params, 'max_frames'):
+            params.max_frames = float('inf')
+        
+        if params.max_frames < params.steps_before + params.steps_after + params.forecast_distance:
+            raise Exception("max frames must be at least steps_before + steps_after + forecast_distance")
         
     def normalize_frames(self):
-        """ normalizes loaded frames """
+        """ 
+            Normalizes loaded frames 
+        """
         self.frames = self.frames.astype('float32')
         
         self.scaler = MinMaxScaler(feature_range=(0, 1))
         self.frames = self.scaler.fit_transform(self.frames)
+        
+    def inverse_transform_data(self):
+        """
+            @return unscaled (true) dataX and dataY
+        """
+        dataX = np.empty(self.dataX.shape)
+        for i in range(self.dataX.shape[0]):
+            dataX[i] = self.scaler.inverse_transform(self.dataX[i])
+        
+        dataY = np.empty(self.dataY.shape)
+        for i in range(self.dataY.shape[0]):
+            dataY[i] = self.scaler.inverse_transform(self.dataY[i])
+            
+        return dataX, dataY
+  
+    def predict_data(self, model):
+        """
+            predicts dataY with the given model
+            using dataX as input and unscales it
+            @return unscaled prediction of shape (nb_samples, steps_after, features)
+        """
+        predict = model.predict(self.dataX)
+        for i in range(predict.shape[0]):
+            predict[i] = self.scaler.inverse_transform(predict[i])
+            
+        return predict
 
     def load_frames(self):
-        """ Loads data from the grib file """
+        """ 
+            Loads data from the grib file 
+            Implemented in subclasses
+        """
         raise NotImplementedError()
-        self.frames = []
-        self.frames_data = []
-        
-        index = 0
-        is_new = True
-
-        for year in self.params.years:
-            f = open(self.params.grib_folder + str(year) + ".grib")
-
-            while index <= self.params.max_frames:
-                gid = codes_grib_new_from_file(f)
-                if gid is None:
-                    break
-                    
-                # check if this matches our month and year
-                dataDate = codes_get(gid, "dataDate")
-                if not self.include_month(dataDate):
-                    is_new = True
-                    print "skipping date: " + str(dataDate).zfill(8), "            \r",
-                    codes_release(gid)
-                    continue
-                    
-                frame = np.empty([self.vector_size])
-                frameIt = 0
-                
-                bottomLeft = codes_grib_find_nearest(gid, self.params.start_lat, self.params.start_lon)[0]
-                topRight = codes_grib_find_nearest(gid, self.params.end_lat, self.params.end_lon)[0]
-                
-                for lat in reversed(list(drange(bottomLeft.lat, topRight.lat + GRID_SIZE, GRID_SIZE))):
-                    for lon in drange(bottomLeft.lon, topRight.lon + GRID_SIZE, GRID_SIZE):
-                        nearest = codes_grib_find_nearest(gid, lat, lon)[0]
-                        frame[frameIt] = max(0, nearest.value)
-                        if nearest.value == codes_get_double(gid, "missingValue"):
-                            raise Warning("missing value!")
-                        frameIt = frameIt + 1
-                
-                self.frames.append(frame)
-                self.frames_data.append(FrameParameters(dataDate, codes_get(gid, "dataTime"), \
-                is_new))
-                is_new = False 
-               
-                codes_release(gid)
-                index = index + 1
-                print "loading frames: ", index, "                 \r",
-
-            f.close()
-            if index > self.params.max_frames:
-                    break
-            
-        print ("")
-        self.frames = np.asarray(self.frames)
-        print ("frames shape:")
-        print (self.frames.shape)
 
     def create_dataset(self, dataset):
-        """ convert an array of values into a dataset matrix """
-        window_size = self.params.window_size
+        """ 
+            convert an array of values into a dataset matrix 
+        """
+        steps_before = self.params.steps_before
+        steps_after = self.params.steps_after
         forecast_distance = self.params.forecast_distance
 
         dataX, dataY = [], []
-        for i in range(len(dataset) - window_size - forecast_distance - 1):
-            a = dataset[i:(i + window_size), :]
+        for i in range(len(dataset) - steps_before - forecast_distance - steps_after - 1):
+            a = dataset[i:(i + steps_before), :]
             dataX.append(a)
-            dataY.append(dataset[(i + window_size):(i + window_size + forecast_distance), :])
+            dataY.append(dataset[(i + steps_before + forecast_distance):(i + steps_before + forecast_distance + steps_after), :])
         return np.array(dataX), np.array(dataY)
     
     def create_samples(self):
-        """ split data into x and y parts and shapes them. """
+        """ 
+            split data into x and y parts and shapes them. 
+        """
         # used later to map the frames to their frame parameters
         self.frames_idx = []
         frames_idx = 0
@@ -169,7 +174,7 @@ class Dataset:
             if (len(frames) > 0 and self.frames_data[index].is_new):
                 frame_sets.append(np.asarray(frames))
                 frames = []
-                self.frames_idx = self.frames_idx[:-self.params.window_size or None]
+                self.frames_idx = self.frames_idx[:-self.params.steps_before or None]
             
             frames.append(self.frames[index])
             self.frames_idx.append(frames_idx)
@@ -178,7 +183,7 @@ class Dataset:
         if (len(frames) > 0):
             frame_sets.append(np.asarray(frames))
             frames = []
-            self.frames_idx = self.frames_idx[:-self.params.window_size or None]
+            self.frames_idx = self.frames_idx[:-self.params.steps_before or None]
         
         self.dataX = np.array([])
         self.dataY = np.array([])
@@ -196,7 +201,9 @@ class Dataset:
 class DatasetArea(Dataset):
     """
         Loads training/test data in a certain lon/lat range from a grid file, shapes and formats it.
-        @param params.window_size: how many frames should be considered for the forecast
+        @param params.steps_before: how many frames before does the network take as input (1 default)
+        @param params.steps_after: how many frames ahead it should predict. (1 default)
+        @param params.forecast_distance: how many frames it should skip when predicting (0 default)
         @param params.max_frames: the maximum frames to load
         @param params.grib_file: the path to the grib file to load
         @param params.start_lon: the start longitude to consider for the data cropping
@@ -213,17 +220,7 @@ class DatasetArea(Dataset):
         """ 
             Checks the parameters for validity
         """
-        if not hasattr(params, 'max_frames'):
-            params.max_frames = float('inf')
-
-        if not hasattr(params, 'forecast_distance'):
-            params.forecast_distance = 1
-        
-        if params.max_frames < params.window_size + 1:
-            raise Exception("max frames must be at least window_size + 1")
-
-        if params.forecast_distance < 1:
-            raise Exception("forecast distance must be at least 1")
+        Dataset.check_params(self, params)
         
         if params.start_lat > params.end_lat:
             raise Exception("latitude dimensions do not match")
@@ -242,9 +239,6 @@ class DatasetArea(Dataset):
             
         if params.end_lat > 90 or params.end_lat < -90:
             raise Exception("latitude (end) must be between -90 and 90") 
-            
-        if params.window_size < 1:
-            raise Exception("window size must be at least one") 
 
         nelat = round_nearest(params.end_lat, GRID_SIZE)
         nslat = round_nearest(params.start_lat, GRID_SIZE)
@@ -260,7 +254,9 @@ class DatasetArea(Dataset):
         self.params = params
 
     def load_frames(self):
-        """ Loads data from the grib file """
+        """ 
+            Loads data from the grib file 
+        """
         self.frames = []
         self.frames_data = []
         
@@ -268,7 +264,7 @@ class DatasetArea(Dataset):
         is_new = True
 
         for year in self.params.years:
-            f = open(self.params.grib_folder + str(year) + ".grib")
+            f = open(self.params.grib_folder + str(year) + '.grib')
 
             while index <= self.params.max_frames:
                 gid = codes_grib_new_from_file(f)
@@ -276,10 +272,10 @@ class DatasetArea(Dataset):
                     break
                     
                 # check if this matches our month and year
-                dataDate = codes_get(gid, "dataDate")
+                dataDate = codes_get(gid, 'dataDate')
                 if not self.include_month(dataDate):
                     is_new = True
-                    print "skipping date: " + str(dataDate).zfill(8), "            \r",
+                    print 'skipping date: ' + str(dataDate).zfill(8), '            \r',
                     codes_release(gid)
                     continue
                     
@@ -293,32 +289,34 @@ class DatasetArea(Dataset):
                     for lon in drange(bottomLeft.lon, topRight.lon + GRID_SIZE, GRID_SIZE):
                         nearest = codes_grib_find_nearest(gid, lat, lon)[0]
                         frame[frameIt] = max(0, nearest.value)
-                        if nearest.value == codes_get_double(gid, "missingValue"):
-                            raise Warning("missing value!")
+                        if nearest.value == codes_get_double(gid, 'missingValue'):
+                            raise Warning('missing value!')
                         frameIt = frameIt + 1
                 
                 self.frames.append(frame)
-                self.frames_data.append(FrameParameters(dataDate, codes_get(gid, "dataTime"), \
+                self.frames_data.append(FrameParameters(dataDate, codes_get(gid, 'dataTime'), \
                 is_new))
                 is_new = False 
                
                 codes_release(gid)
                 index = index + 1
-                print "loading frames: ", index, "                 \r",
+                print 'loading frames: ', index, '                 \r',
 
             f.close()
             if index > self.params.max_frames:
                     break
             
-        print ("")
+        print ('')
         self.frames = np.asarray(self.frames)
-        print ("frames shape:")
+        print ('frames shape:')
         print (self.frames.shape)
         
 class DatasetNearest(Dataset):
     """
         Loads training/test data of the nearest n points from a grid file, shapes and formats it.
-        @param params.window_size: how many frames should be considered for the forecast
+        @param params.steps_before: how many frames before does the network take as input (1 default)
+        @param params.steps_after: how many frames ahead it should predict. (1 default)
+        @param params.forecast_distance: how many frames it should skip when predicting (0 default)
         @param params.max_frames: the maximum frames to load
         @param params.grib_file: the path to the grib file to load
         @param params.lon: the longitude of the center point
@@ -334,36 +332,23 @@ class DatasetNearest(Dataset):
         """ 
             Checks the parameters for validity
         """
-        if not hasattr(params, 'max_frames'):
-            params.max_frames = float('inf')
+        Dataset.check_params(self, params)
 
-        if not hasattr(params, 'forecast_distance'):
-            params.forecast_distance = 1
-        
-        if params.max_frames < params.window_size + 1:
-            raise Exception("max frames must be at least window_size + 1")
-
-        if params.forecast_distance < 1:
-            raise Exception("forecast distance must be at least 1")
-        
         if params.lon > 360 or params.lon < 0:
-            raise Exception("longitude must be between 0 and 360")   
+            raise Exception('longitude must be between 0 and 360')   
 
         if params.lat > 90 or params.lat < -90:
-            raise Exception("latitude must be between -90 and 90")   
-      
-        if params.window_size < 1:
-            raise Exception("window size must be at least one") 
-            
+            raise Exception('latitude must be between -90 and 90')   
+
         if params.npoints < 1:
-            raise Exception("n points must be at least one") 
+            raise Exception('n points must be at least one') 
 
         params.lat = round_nearest(params.lat, GRID_SIZE)
         params.lon = round_nearest(params.lon, GRID_SIZE)
        
         self.vector_size = params.npoints
             
-        print ("vector size is %i" % self.vector_size)
+        print ('vector size is %i' % self.vector_size)
         
         self.params = params
         
@@ -400,7 +385,7 @@ class DatasetNearest(Dataset):
         nnearest = self.calculate_npoints()
 
         for year in self.params.years:
-            f = open(self.params.grib_folder + str(year) + ".grib")
+            f = open(self.params.grib_folder + str(year) + '.grib')
 
             while index <= self.params.max_frames:
                 gid = codes_grib_new_from_file(f)
@@ -408,10 +393,10 @@ class DatasetNearest(Dataset):
                     break
                     
                 # check if this matches our month and year
-                dataDate = codes_get(gid, "dataDate")
+                dataDate = codes_get(gid, 'dataDate')
                 if not self.include_month(dataDate):
                     is_new = True
-                    print "skipping date: " + str(dataDate).zfill(8), "            \r",
+                    print 'skipping date: ' + str(dataDate).zfill(8), '            \r',
                     codes_release(gid)
                     continue
                     
@@ -421,24 +406,24 @@ class DatasetNearest(Dataset):
                 for nearest_point in nnearest:
                     nearest = codes_grib_find_nearest(gid, nearest_point[0], nearest_point[1])[0]
                     frame[frameIt] = max(0, nearest.value)
-                    if nearest.value == codes_get_double(gid, "missingValue"):
-                        raise Warning("missing value!")
+                    if nearest.value == codes_get_double(gid, 'missingValue'):
+                        raise Warning('missing value!')
                     frameIt = frameIt + 1
             
                 self.frames.append(frame)
-                self.frames_data.append(FrameParameters(dataDate, codes_get(gid, "dataTime"), \
+                self.frames_data.append(FrameParameters(dataDate, codes_get(gid, 'dataTime'), \
                 is_new))
                 is_new = False 
                
                 codes_release(gid)
                 index = index + 1
-                print "loading frames: ", index, "                 \r",
+                print 'loading frames: ', index, '                 \r',
 
             f.close()
             if index > self.params.max_frames:
                 break
             
-        print ("")
+        print ('')
         self.frames = np.asarray(self.frames)
-        print ("frames shape:")
+        print ('frames shape:')
         print (self.frames.shape)

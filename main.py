@@ -10,7 +10,8 @@ from visualise import *
 def train(config):
     # set (and check) params in config
     train_params = AttrDict()
-    train_params.window_size = config['window_size']
+    train_params.steps_before = config['steps_before']
+    train_params.steps_after = config['steps_after']
     train_params.start_lat = config['start_lat']
     train_params.end_lat = config['end_lat']
     train_params.start_lon = config['start_lon']
@@ -19,20 +20,20 @@ def train(config):
     train_params.years = config['years']
     train_params.months = config['months']
     epoch_count = config['epoch_count']
-    model_file = config['model_file']
+    model_folder = config['model_folder']
 
     # load the data from the .grib files
     trainData = DatasetArea(train_params)
     
     # create and fit the LSTM network
-    model = create_model(train_params.window_size, trainData.vector_size, 200)
-    train_model(model, trainData, epoch_count)
-    model.save(model_file)
+    model = create_model(train_params.steps_before, train_params.steps_after, trainData.vector_size, 200)
+    train_model(model, trainData, epoch_count, model_folder)
     
 def evaluate(config):
     # set (and check) params in config    
     test_params = AttrDict()
-    test_params.window_size = config['window_size']
+    test_params.steps_before = config['steps_before']
+    test_params.steps_after = config['steps_after']
     test_params.start_lat = config['start_lat']
     test_params.end_lat = config['end_lat']
     test_params.start_lon = config['start_lon']

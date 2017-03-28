@@ -100,7 +100,7 @@ def test_nb_neurons():
         
         # create and fit the LSTM network
         print('creating model for neurons: ' + str(nb_neurons))
-        model = create_model(train_params.steps_before, trainData.vector_size, nb_neurons)
+        model = create_model(train_params.steps_before, trainData.params.nb_features, nb_neurons)
         train_model(model, trainData, epoch_count)
         model.save(model_file)
  
@@ -156,7 +156,7 @@ def test_steps_before():
         
         # create and fit the LSTM network
         print('creating model for steps_before: ' + str(steps_before))
-        model = create_model(train_params.steps_before, trainData.vector_size, 100)
+        model = create_model(train_params.steps_before, trainData.params.nb_features, 100)
         train_model(model, trainData, epoch_count)
         model.save(model_file)
  
@@ -207,7 +207,7 @@ def test_network_depth():
         
         # create and fit the LSTM network
         print('creating model for network_depth: ' + str(network_depth))
-        model = create_deep_model(train_params.steps_before, trainData.vector_size, train_params.npoints, network_depth)
+        model = create_deep_model(train_params.steps_before, trainData.params.nb_features, train_params.npoints, network_depth)
         train_model(model, trainData, 50 * network_depth)
         model.save(model_file)
  
@@ -262,7 +262,7 @@ def test_network_activation():
         
         # create and fit the LSTM network
         print('creating model for network_activation: ' + network_activation)
-        model = create_model_activation(train_params.steps_before, trainData.vector_size, train_params.npoints, network_activation)
+        model = create_model_activation(train_params.steps_before, trainData.params.nb_features, train_params.npoints, network_activation)
         train_model(model, trainData, 20)
         model.save(model_file)
  
@@ -321,7 +321,7 @@ def test_forecast_distance():
         
         # create and fit the LSTM network
         print('creating model for forecast_distance: ' + str(forecast_distance))
-        model = create_model(train_params.steps_before, trainData.vector_size, train_params.npoints * 2)
+        model = create_model(train_params.steps_before, trainData.params.nb_features, train_params.npoints * 2)
         train_model(model, trainData, 20)
         model.save(model_file)
         

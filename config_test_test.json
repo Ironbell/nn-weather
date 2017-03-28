@@ -7,7 +7,8 @@
     "end_lat" : 47.749943,
     "start_lon" : 186.108398,
     "end_lon" : 190.524902,
-    "grib_folder" : "/media/isa/VIS1/temperature/",
+    "grib_folder" : "/media/isa/VIS1/",
+    "grib_parameters" : ["temperature"],
     "years" : [2016],
     "months" : [6],
     "model_folder" : "weather_model"

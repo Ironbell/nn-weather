@@ -1,6 +1,7 @@
 import numpy as np
 np.random.seed(1337)
 import matplotlib.pyplot as plt
+import json, attrdict
 
 from keras.models import Sequential
 from keras.layers import Dense, Activation, LSTM, Dropout, RepeatVector, TimeDistributed
@@ -49,7 +50,11 @@ def train_model(model, dataset, epoch_count, model_folder):
     if not os.path.exists(model_folder):
         os.makedirs(model_folder)
 
+    # save model
     model.save(model_folder + '/model.h5')
+    # save dataset parameters as json
+    with open(model_folder + '/params.json', 'w') as fp:
+        json.dump(dataset.params, fp)
 
     # plot training and val loss/accuracy
     # summarize history for accuracy
@@ -142,7 +147,7 @@ def evaluate_model_score_raw(dataY, predict):
         for j in range(dataY.shape[2]): # loop over features
             scores[i, j, 0] = math.sqrt(mean_squared_error(dataY[:,i,j], predict[:,i,j]))
             errors = np.absolute(dataY[:,i,j] - predict[:,i,j])
-            scores[i, j, 0] = np.mean(np.absolute(errors - np.mean(errors, axis=0)), axis=0)
+            scores[i, j, 1] = np.mean(np.absolute(errors - np.mean(errors, axis=0)), axis=0)
 
     return scores
     

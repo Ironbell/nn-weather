@@ -2,7 +2,7 @@
     Loading and preprocessing of datasets
     from grib files
 """
-import os, math, re
+import os, math, re, gc
 import decimal
 import numpy as np
 import scipy as sp
@@ -100,6 +100,9 @@ class Dataset:
         
         if params.max_frames < params.steps_before + params.steps_after + params.forecast_distance:
             raise Exception("max frames must be at least steps_before + steps_after + forecast_distance")
+            
+        if len(params.grib_parameters) < 1:
+            raise Exception("grib_parameters must be a list with at least one entry")
         
     def normalize_frames(self):
         """ 
@@ -108,6 +111,7 @@ class Dataset:
         self.frames = self.frames.astype('float32')
         
         self.scaler = MinMaxScaler(feature_range=(0, 1))
+        print(self.frames)
         self.frames = self.scaler.fit_transform(self.frames)
         
     def inverse_transform_data(self):
@@ -205,7 +209,8 @@ class DatasetArea(Dataset):
         @param params.steps_after: how many frames ahead it should predict. (1 default)
         @param params.forecast_distance: how many frames it should skip when predicting (0 default)
         @param params.max_frames: the maximum frames to load
-        @param params.grib_file: the path to the grib file to load
+        @param params.grib_folder: the path to the folder holding grib subfolders
+        @param params.grib_parameters: which parameters to consider, for example ['temperature', 'pressure']
         @param params.start_lon: the start longitude to consider for the data cropping
         @param params.end_lon: the end longitude to consider for the data cropping
         @param params.start_lat: the start latitude to consider for the data cropping
@@ -247,10 +252,15 @@ class DatasetArea(Dataset):
 
         self.lat_range = int((1 + (nelat - nslat) / GRID_SIZE))
         self.lon_range = int((1 + (nelon - nslon) / GRID_SIZE))
-        self.vector_size = self.lat_range * self.lon_range
+
+        params.nb_grib_points = self.lat_range * self.lon_range
+        params.nb_features = params.nb_grib_points * len(params.grib_parameters)
             
-        print ("vector size is %i" % self.vector_size)
-        
+        print ('nb features is %i' % params.nb_features)
+        print ('nb grib points is %i' % params.nb_grib_points)
+        print ('parameters are: ')
+        print (params.grib_parameters)
+
         self.params = params
 
     def load_frames(self):
@@ -264,50 +274,67 @@ class DatasetArea(Dataset):
         is_new = True
 
         for year in self.params.years:
-            f = open(self.params.grib_folder + str(year) + '.grib')
-
+            files = []
+            for parameter in self.params.grib_parameters:
+                f = open(self.params.grib_folder + parameter + "/" + str(year) + '.grib')
+                files.append(f)
+                
             while index <= self.params.max_frames:
-                gid = codes_grib_new_from_file(f)
-                if gid is None:
+                gc.collect()
+                gids = []
+                for f in files:
+                    gid = codes_grib_new_from_file(f)
+                    gids.append(gid)
+                if gids[0] is None:
                     break
                     
+                missingVal = codes_get_double(gids[0], 'missingValue')
+                    
                 # check if this matches our month and year
-                dataDate = codes_get(gid, 'dataDate')
+                dataDate = codes_get(gids[0], 'dataDate')
                 if not self.include_month(dataDate):
                     is_new = True
                     print 'skipping date: ' + str(dataDate).zfill(8), '            \r',
-                    codes_release(gid)
+                    for gid in gids:
+                        codes_release(gid)
                     continue
                     
-                frame = np.empty([self.vector_size])
-                frameIt = 0
+                frame = np.empty((self.params.nb_grib_points, len(self.params.grib_parameters)))  
+                gidIt = 0
+                for gid in gids:
+                    frameIt = 0
+                    
+                    bottomLeft = codes_grib_find_nearest(gid, self.params.start_lat, self.params.start_lon)[0]
+                    topRight = codes_grib_find_nearest(gid, self.params.end_lat, self.params.end_lon)[0]
+                    
+                    for lat in reversed(list(drange(bottomLeft.lat, topRight.lat + GRID_SIZE, GRID_SIZE))):
+                        for lon in drange(bottomLeft.lon, topRight.lon + GRID_SIZE, GRID_SIZE):
+                            nearest = codes_grib_find_nearest(gid, lat, lon)[0]
+                            frame[frameIt, gidIt] = max(0, nearest.value)
+                            if nearest.value == missingVal:
+                                raise Warning('missing value!')
+                            frameIt = frameIt + 1
+                            
+                    gidIt = gidIt + 1
                 
-                bottomLeft = codes_grib_find_nearest(gid, self.params.start_lat, self.params.start_lon)[0]
-                topRight = codes_grib_find_nearest(gid, self.params.end_lat, self.params.end_lon)[0]
-                
-                for lat in reversed(list(drange(bottomLeft.lat, topRight.lat + GRID_SIZE, GRID_SIZE))):
-                    for lon in drange(bottomLeft.lon, topRight.lon + GRID_SIZE, GRID_SIZE):
-                        nearest = codes_grib_find_nearest(gid, lat, lon)[0]
-                        frame[frameIt] = max(0, nearest.value)
-                        if nearest.value == codes_get_double(gid, 'missingValue'):
-                            raise Warning('missing value!')
-                        frameIt = frameIt + 1
-                
-                self.frames.append(frame)
-                self.frames_data.append(FrameParameters(dataDate, codes_get(gid, 'dataTime'), \
+                self.frames.append(frame.flatten('C'))
+                self.frames_data.append(FrameParameters(dataDate, codes_get(gids[0], 'dataTime'), \
                 is_new))
                 is_new = False 
                
-                codes_release(gid)
+                for gid in gids:
+                    codes_release(gid)
                 index = index + 1
                 print 'loading frames: ', index, '                 \r',
 
-            f.close()
+            for f in files:
+                f.close()
             if index > self.params.max_frames:
-                    break
+                break
             
         print ('')
         self.frames = np.asarray(self.frames)
+        gc.collect()
         print ('frames shape:')
         print (self.frames.shape)
         
@@ -318,7 +345,8 @@ class DatasetNearest(Dataset):
         @param params.steps_after: how many frames ahead it should predict. (1 default)
         @param params.forecast_distance: how many frames it should skip when predicting (0 default)
         @param params.max_frames: the maximum frames to load
-        @param params.grib_file: the path to the grib file to load
+        @param params.grib_folder: the path to the folder holding grib subfolders
+        @param params.grib_parameters: which parameters to consider, for example ['temperature', 'pressure']
         @param params.lon: the longitude of the center point
         @param params.lat: the latitude of the center point
         @param params.npoints: how many points to load
@@ -346,10 +374,13 @@ class DatasetNearest(Dataset):
         params.lat = round_nearest(params.lat, GRID_SIZE)
         params.lon = round_nearest(params.lon, GRID_SIZE)
        
-        self.vector_size = params.npoints
+        params.nb_features = params.npoints * len(params.grib_parameters)
+        params.nb_grib_points = params.npoints
             
-        print ('vector size is %i' % self.vector_size)
-        
+        print ('nb features is %i' % params.nb_features)
+        print ('nb grib points is %i' % params.nb_grib_points)
+        print ('parameters are: ')
+        print (params.grib_parameters)
         self.params = params
         
     def calculate_npoints(self):
@@ -385,45 +416,62 @@ class DatasetNearest(Dataset):
         nnearest = self.calculate_npoints()
 
         for year in self.params.years:
-            f = open(self.params.grib_folder + str(year) + '.grib')
-
+            files = []
+            for parameter in self.params.grib_parameters:
+                f = open(self.params.grib_folder + parameter + "/" + str(year) + '.grib')
+                files.append(f)
+                
             while index <= self.params.max_frames:
-                gid = codes_grib_new_from_file(f)
-                if gid is None:
+                gc.collect()
+                gids = []
+                for f in files:
+                    gid = codes_grib_new_from_file(f)
+                    gids.append(gid)
+                if gids[0] is None:
                     break
                     
+                missingVal = codes_get_double(gids[0], 'missingValue')
+                    
                 # check if this matches our month and year
-                dataDate = codes_get(gid, 'dataDate')
+                dataDate = codes_get(gids[0], 'dataDate')
                 if not self.include_month(dataDate):
                     is_new = True
                     print 'skipping date: ' + str(dataDate).zfill(8), '            \r',
-                    codes_release(gid)
+                    for gid in gids:
+                        codes_release(gid)
                     continue
                     
-                frame = np.empty([self.vector_size])
-                frameIt = 0
+                frame = np.empty((self.params.nb_grib_points, len(self.params.grib_parameters)))  
+                gidIt = 0
                 
-                for nearest_point in nnearest:
-                    nearest = codes_grib_find_nearest(gid, nearest_point[0], nearest_point[1])[0]
-                    frame[frameIt] = max(0, nearest.value)
-                    if nearest.value == codes_get_double(gid, 'missingValue'):
-                        raise Warning('missing value!')
-                    frameIt = frameIt + 1
+                for gid in gids:
+                    frameIt = 0
+                    for nearest_point in nnearest:
+                        nearest = codes_grib_find_nearest(gid, nearest_point[0], nearest_point[1])[0]
+                        frame[frameIt, gidIt] = max(0, nearest.value)
+                        if nearest.value == missingVal:
+                            raise Warning('missing value!')
+                        frameIt = frameIt + 1
+                        
+                    gidIt = gidIt + 1
             
-                self.frames.append(frame)
-                self.frames_data.append(FrameParameters(dataDate, codes_get(gid, 'dataTime'), \
+                self.frames.append(frame.flatten('C'))
+                self.frames_data.append(FrameParameters(dataDate, codes_get(gids[0], 'dataTime'), \
                 is_new))
                 is_new = False 
                
-                codes_release(gid)
+                for gid in gids:
+                    codes_release(gid)
                 index = index + 1
                 print 'loading frames: ', index, '                 \r',
 
-            f.close()
+            for f in files:
+                f.close()
             if index > self.params.max_frames:
                 break
             
         print ('')
         self.frames = np.asarray(self.frames)
+        gc.collect()
         print ('frames shape:')
         print (self.frames.shape)

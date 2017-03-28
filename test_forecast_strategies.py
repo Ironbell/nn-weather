@@ -21,7 +21,7 @@ def test_many_to_many_forecast():
     train_params.lat = 47.25
     train_params.lon = 189.0
     train_params.npoints = 25
-    train_params.grib_folder = '/media/isa/VIS1/temperature/'
+    train_params.grib_folder = '/home/isa/sftp/temperature/'
     train_params.months = [1,2,3,4,5,6,7,8,9,10,11,12]
     train_params.years = [2000,2001,2002]
 
@@ -32,7 +32,7 @@ def test_many_to_many_forecast():
         
     # create and fit the LSTM network
     print('creating model...')
-    model = create_model(train_params.steps_before, train_params.steps_after, trainData.vector_size, train_params.npoints * 2)
+    model = create_model(train_params.steps_before, train_params.steps_after, trainData.nb_features, train_params.npoints * 2)
     train_model(model, trainData, EPOCHS, model_folder)
 
     # evaluate on whole 2003 and save results
@@ -60,7 +60,7 @@ def test_recursive_forecast():
     train_params.lat = 47.25
     train_params.lon = 189.0
     train_params.npoints = 25
-    train_params.grib_folder = '/media/isa/VIS1/temperature/'
+    train_params.grib_folder = '/home/isa/sftp/temperature/'
     train_params.months = [1,2,3,4,5,6,7,8,9,10,11,12]
     train_params.years = [2000,2001,2002]
 
@@ -71,7 +71,7 @@ def test_recursive_forecast():
         
     # create and fit the LSTM network
     print('creating model...')
-    model = create_model(train_params.steps_before, train_params.steps_after, trainData.vector_size, train_params.npoints * 2)
+    model = create_model(train_params.steps_before, train_params.steps_after, trainData.nb_features, train_params.npoints * 2)
     train_model(model, trainData, EPOCHS, model_folder)
 
     # evaluate on whole 2003 and save results
@@ -103,7 +103,7 @@ def test_individual_model_forecast():
     train_params.lat = 47.25
     train_params.lon = 189.0
     train_params.npoints = 25
-    train_params.grib_folder = '/media/isa/VIS1/temperature/'
+    train_params.grib_folder = '/home/isa/sftp/temperature/'
     train_params.months = [1,2,3,4,5,6,7,8,9,10,11,12]
     train_params.years = [2000,2001,2002]
     
@@ -116,7 +116,7 @@ def test_individual_model_forecast():
         trainData = DatasetNearest(train_params)
         
         print('creating model...')
-        model = create_model(train_params.steps_before, train_params.steps_after, trainData.vector_size, train_params.npoints * 2)
+        model = create_model(train_params.steps_before, train_params.steps_after, trainData.nb_features, train_params.npoints * 2)
         train_model(model, trainData, EPOCHS, model_folder)
        
     # evaluate the individual models
@@ -160,15 +160,15 @@ def plot_forecast_strategies():
         
         plt.cla()
         fig, ax = plt.subplots()
-      
+
         ax.errorbar(ind, mtm_score[:, 0, 0], yerr=mtm_score[:, 0, 1], fmt='-o', label='Many to many model forecast')
         ax.errorbar(ind, im_score[:, 0, 0], yerr=im_score[:, 0, 1], fmt='-o', label='Individual model forecast')
         ax.errorbar(ind, rec_score[:, 0, 0], yerr=rec_score[:, 0, 1], fmt='-o', label='Recursive model forecast')
-     
+
         plt.xlabel('Forecast Steps')
         plt.ylabel('RMSE (Kelvin)')
         plt.title('Compare forecast models (' + str(month) + '-2013)')
-        plt.legend(loc='upper right')
+        plt.legend(loc='lower right')
         plt.savefig("test_forecast_strategies/plots/plot_" + str(month) + ".png")
 
 def test_forecast_strategies():
@@ -178,9 +178,9 @@ def test_forecast_strategies():
         2. individual models 
         3. recursive model
     '''
-    test_many_to_many_forecast()
-    test_recursive_forecast()
-    test_individual_model_forecast()
+    #test_many_to_many_forecast()
+    #test_recursive_forecast()
+    #test_individual_model_forecast()
     plot_forecast_strategies()
     '''# plot
     nan_array = np.empty((testData.params.steps_before - 1))

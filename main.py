@@ -39,6 +39,7 @@ def evaluate(config):
     test_params.start_lon = config['start_lon']
     test_params.end_lon = config['end_lon']
     test_params.grib_folder = config['grib_folder']
+    test_params.grib_parameters = config['grib_parameters']
     test_params.years = config['years']
     test_params.months = config['months']
     max_frames = config['max_frames']

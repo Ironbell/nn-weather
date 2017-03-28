@@ -106,37 +106,62 @@ class Dataset:
         
     def normalize_frames(self):
         """ 
-            Normalizes loaded frames 
+            Normalizes and reshapes loaded frames 
         """
         self.frames = self.frames.astype('float32')
         
-        self.scaler = MinMaxScaler(feature_range=(0, 1))
-        print(self.frames)
-        self.frames = self.scaler.fit_transform(self.frames)
+        nb_params = len(self.params.grib_parameters)
+        self.scalers = np.empty((nb_params))
         
-    def inverse_transform_data(self):
+        # we normalize per grib  parameter
+        for i in range(nb_params):
+            array = self.frames[:,:,i]
+            self.scalers[i] = max(1.0,array.max())
+            array *= 1.0/self.scalers[i]
+            self.frames[:,:,i] = array
+            
+        self.frames = self.frames.reshape(self.frames.shape[0], -1)
+
+    def inverse_transform_data(self, flatten=True):
         """
             @return unscaled (true) dataX and dataY
         """
-        dataX = np.empty(self.dataX.shape)
-        for i in range(self.dataX.shape[0]):
-            dataX[i] = self.scaler.inverse_transform(self.dataX[i])
+        nb_params = len(self.params.grib_parameters)
+        dataX = self.dataX.reshape(self.dataX.shape[0], self.dataX.shape[1], self.params.nb_grib_points, nb_params)
         
-        dataY = np.empty(self.dataY.shape)
-        for i in range(self.dataY.shape[0]):
-            dataY[i] = self.scaler.inverse_transform(self.dataY[i])
+        for i in range(dataX.shape[3]):
+            dataX[:,:,:,i] *= self.scalers[i]
+        
+        if (flatten):
+            dataX = dataX.reshape(self.dataX.shape) 
+        
+        dataY = self.dataY.reshape(self.dataY.shape[0], self.dataY.shape[1], self.params.nb_grib_points, nb_params)
+        for i in range(dataY.shape[3]):
+            dataY[:,:,:,i] *= self.scalers[i]
+        
+        if (flatten):
+            dataY = dataY.reshape(self.dataY.shape) 
             
         return dataX, dataY
   
-    def predict_data(self, model):
+    def predict_data(self, model, flatten=True):
         """
             predicts dataY with the given model
             using dataX as input and unscales it
+            @param flatten: whether to flatten the reshaped data or leave it seperated per grib parameter
             @return unscaled prediction of shape (nb_samples, steps_after, features)
         """
+        
         predict = model.predict(self.dataX)
-        for i in range(predict.shape[0]):
-            predict[i] = self.scaler.inverse_transform(predict[i])
+        
+        nb_params = len(self.params.grib_parameters)
+        predict = predict.reshape(predict.shape[0], predict.shape[1], self.params.nb_grib_points, nb_params)
+        
+        for i in range(predict.shape[3]):
+            predict[:,:,:,i] *= self.scalers[i]
+            
+        if (flatten):
+            predict = predict.reshape(self.predict.shape) 
             
         return predict
 
@@ -317,7 +342,7 @@ class DatasetArea(Dataset):
                             
                     gidIt = gidIt + 1
                 
-                self.frames.append(frame.flatten('C'))
+                self.frames.append(frame)
                 self.frames_data.append(FrameParameters(dataDate, codes_get(gids[0], 'dataTime'), \
                 is_new))
                 is_new = False 
@@ -455,7 +480,7 @@ class DatasetNearest(Dataset):
                         
                     gidIt = gidIt + 1
             
-                self.frames.append(frame.flatten('C'))
+                self.frames.append(frame)
                 self.frames_data.append(FrameParameters(dataDate, codes_get(gids[0], 'dataTime'), \
                 is_new))
                 is_new = False 

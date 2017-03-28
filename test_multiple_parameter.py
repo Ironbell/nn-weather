@@ -22,7 +22,7 @@ def test_multiple_parameter():
     train_params.lon = 189.0
     train_params.npoints = 9
     train_params.grib_folder = '/media/isa/VIS1/'
-    train_params.grib_parameters = ['temperature', 'pressure']
+    train_params.grib_parameters = ['temperature']
     train_params.months = [1]#[1,2,3,4,5,6,7,8,9,10,11,12]
     train_params.years = [2000]#[2000,2001,2002]
 
@@ -37,13 +37,46 @@ def test_multiple_parameter():
     train_model(model, trainData, EPOCHS, model_folder)
 
     # evaluate on whole 2003 and save results
-    train_params.years = [2003]
+    train_params.years = [2000]
     months = [1]
     testData = DatasetNearest(train_params)
-    predict = testData.predict_data(model)
+    predict = testData.predict_data(model, flatten=False)
+    dataX, dataY = testData.inverse_transform_data(flatten=False)
     np.save('test_multiple_parameters/mtm_prediction.npy', predict)
-    score = evaluate_model_score(model, testData)
-    np.save('test_multiple_parameters/mtm_score.npy', score)
+
+    # plot as a sanity check
+    nb_results = 10
+    
+    nan_array = np.empty((testData.params.steps_before - 1))
+    nan_array.fill(np.nan)
+    nan_array2 = np.empty(train_params.steps_after)
+    nan_array2.fill(np.nan)
+    ind = np.arange(testData.params.steps_before + train_params.steps_after)
+
+    for i in range(nb_results):
+        start_date = testData.frames_data[testData.frames_idx[i + testData.params.steps_before]]
+        end_date = testData.frames_data[testData.frames_idx[i + testData.params.steps_before + testData.params.steps_after - 1]]
+        
+        start_date_s = start_date.date + '-' + start_date.time
+        end_date_s = end_date.date + '-' + end_date.time
+
+        # plot temperature forecasts
+        fig, ax = plt.subplots()
+        for j in range(len(testData.params.grib_parameters)):
+            forecasts = np.concatenate((nan_array, dataX[i, -1:, 0, j], predict[i, :, 0, j]))
+            ground_truth = np.concatenate((nan_array, dataX[i, -1:, 0, j], dataY[i, :, 0, j]))
+            network_input = np.concatenate((dataX[i, :, 0, j], nan_array2))
+         
+            ax.plot(ind, network_input, 'b-x', label='Network input')
+            ax.plot(ind, forecasts, 'r-x', label='Many to many model forecast')
+            ax.plot(ind, ground_truth, 'g-x', label = 'Ground truth')
+            
+            plt.xlabel('Time (6h steps)')
+            plt.ylabel(testData.params.grib_parameters[j])
+            plt.title('Many to Many Forecast (' + start_date_s + ' -- ' + end_date_s + ')')
+            plt.legend(loc='best')
+            plt.savefig("test_multiple_parameters/plot_" + testData.params.grib_parameters[j] + str(i) + ".png")
+            plt.cla()
 
 def plot_forecast_strategies():
     """

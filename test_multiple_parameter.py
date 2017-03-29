@@ -17,7 +17,7 @@ def test_features(grib_parameters, subfolder_name):
     train_params = AttrDict()
     train_params.steps_before = 30
     train_params.forecast_distance = 0
-    train_params.steps_after = 8
+    train_params.steps_after = 30
     train_params.lat = 47.25
     train_params.lon = 189.0
     train_params.npoints = 9
@@ -33,7 +33,7 @@ def test_features(grib_parameters, subfolder_name):
         
     # create and fit the LSTM network
     print('creating model...')
-    model = create_model(train_params.steps_before, train_params.steps_after, trainData.params.nb_features, trainData.params.nb_features * 2)
+    model = create_model(train_params.steps_before, trainData.params.nb_features)
     train_model(model, trainData, EPOCHS, model_folder)
 
 def evaluate_features(grib_parameters, subfolder_name):
@@ -43,7 +43,7 @@ def evaluate_features(grib_parameters, subfolder_name):
     train_params = AttrDict()
     train_params.steps_before = 30
     train_params.forecast_distance = 0
-    train_params.steps_after = 8
+    train_params.steps_after = 30
     train_params.lat = 47.25
     train_params.lon = 189.0
     train_params.npoints = 9
@@ -57,6 +57,8 @@ def evaluate_features(grib_parameters, subfolder_name):
     train_params.years = [2004]
     months = [1,2,3,4,5,6,7,8,9,10,11,12]
     
+    STEPS_AFTER = 8
+    
     for month in months:
         train_params.months = [month]
         testData = DatasetNearest(train_params)
@@ -68,9 +70,11 @@ def evaluate_features(grib_parameters, subfolder_name):
         
         predict = testData.predict_data(model, flatten=False)
         dataX, dataY = testData.inverse_transform_data(flatten=False)
+        dataY = dataY[:,0:STEPS_AFTER,:,:]
+        predict = predict[:,0:STEPS_AFTER,:,:]
         np.save(subfolder + '/prediction.npy', predict)
         
-        score = evaluate_model_score(model, testData)
+        score = evaluate_model_score(model, testData, STEPS_AFTER) # we're only interested in the first few steps
         score = score[:,0:len(train_params.grib_parameters),:] # we're only interested in the first feature
         np.save(subfolder + '/score.npy', score)
         print('score shape:')
@@ -81,13 +85,13 @@ def evaluate_features(grib_parameters, subfolder_name):
         
         nan_array = np.empty((testData.params.steps_before - 1))
         nan_array.fill(np.nan)
-        nan_array2 = np.empty(train_params.steps_after)
+        nan_array2 = np.empty(STEPS_AFTER)
         nan_array2.fill(np.nan)
-        ind = np.arange(testData.params.steps_before + train_params.steps_after)
+        ind = np.arange(testData.params.steps_before + STEPS_AFTER)
 
         for i in range(nb_results):
             start_date = testData.frames_data[testData.frames_idx[i + testData.params.steps_before]]
-            end_date = testData.frames_data[testData.frames_idx[i + testData.params.steps_before + testData.params.steps_after - 1]]
+            end_date = testData.frames_data[testData.frames_idx[i + testData.params.steps_before + STEPS_AFTER - 1]]
             
             start_date_s = start_date.date + '-' + start_date.time
             end_date_s = end_date.date + '-' + end_date.time
@@ -153,7 +157,7 @@ def plot_comparision():
         plt.cla()
     
 def main():
-    #test_features(['temperature'], 'temperature_only')
+    test_features(['temperature'], 'temperature_only')
     evaluate_features(['temperature'], 'temperature_only')
     test_features(['pressure'], 'pressure_only')
     evaluate_features(['pressure'], 'pressure_only')

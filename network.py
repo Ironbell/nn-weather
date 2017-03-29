@@ -9,27 +9,25 @@ from sklearn.metrics import mean_squared_error
 
 from dataset import *
 
-def create_model(steps_before, steps_after, feature_count, hidden_neurons):
+def create_model(steps_before, feature_count):
     """ 
         creates, compiles and returns a RNN model 
-        @param steps_before: the number of previous time steps (input)
-        @param steps_after: the number of posterior time steps (output or predictions)
+        @param steps_before: the number of previous time steps (input). It equals the output.
         @param feature_count: the number of features in the model
-        @param hidden_neurons: the number of hidden neurons per LSTM layer
     """
-    DROPOUT = 0.5
+    DROPOUT = 0.2
     LAYERS = 2
+    HIDDEN_NEURONS = 300
     
     model = Sequential()  
-    model.add(LSTM(hidden_neurons, input_shape=(steps_before, feature_count)))  
+    model.add(LSTM(input_dim=feature_count, output_dim=HIDDEN_NEURONS, return_sequences=True))  
     model.add(Dropout(DROPOUT))
-    model.add(RepeatVector(steps_after))
     for _ in range(LAYERS):
-        model.add(LSTM(hidden_neurons, return_sequences=True))
+        model.add(LSTM(HIDDEN_NEURONS, return_sequences=True))
         model.add(Dropout(DROPOUT))
 
     model.add(TimeDistributed(Dense(feature_count)))
-    model.add(Activation('sigmoid'))   
+    model.add(Activation('linear'))   
     
     model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['accuracy'])  
     return model
@@ -118,19 +116,20 @@ def evaluate_model(model, dataset, data_type=''):
 
     return predict
     
-def evaluate_model_score(model, dataset):
+def evaluate_model_score(model, dataset, steps_after):
     """ 
         evaluates the model given the dataset and returns
         the avg mean squared error.
         @param model: the model to evaluate_model
         @param dataset: data to evaluate
+        @param steps_after: how many timesteps to consider
         @return arithmetic mean RMSE, std of RMSE, each one per timestep and per feature, shape is (timestep, feature, [0=rmse, 1=mad])
     """
     # make predictions
     predict = dataset.predict_data(model)
     _, dataY = dataset.inverse_transform_data()
 
-    return evaluate_model_score_raw(dataY, predict)
+    return evaluate_model_score_raw(dataY[:,0:steps_after,:], predict[:,0:steps_after,:])
     
 def evaluate_model_score_raw(dataY, predict):
     """ 

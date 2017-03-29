@@ -126,9 +126,9 @@ class Dataset:
     def inverse_transform_data(self, flatten=True):
         """
             @return unscaled (true) dataX and dataY
-        """
+        """     
         nb_params = len(self.params.grib_parameters)
-        dataX = self.dataX.reshape(self.dataX.shape[0], self.dataX.shape[1], self.params.nb_grib_points, nb_params)
+        dataX = np.copy(self.dataX.reshape(self.dataX.shape[0], self.dataX.shape[1], self.params.nb_grib_points, nb_params))
         
         for i in range(dataX.shape[3]):
             for j in range(dataX.shape[0]):
@@ -137,14 +137,14 @@ class Dataset:
         if (flatten):
             dataX = dataX.reshape(self.dataX.shape) 
         
-        dataY = self.dataY.reshape(self.dataY.shape[0], self.dataY.shape[1], self.params.nb_grib_points, nb_params)
+        dataY = np.copy(self.dataY.reshape(self.dataY.shape[0], self.dataY.shape[1], self.params.nb_grib_points, nb_params))
         for i in range(dataY.shape[3]):
             for j in range(dataY.shape[0]):
                 dataY[j,:,:,i] = self.scalers[i].inverse_transform(dataY[j,:,:,i])
         
         if (flatten):
             dataY = dataY.reshape(self.dataY.shape) 
-            
+      
         return dataX, dataY
   
     def predict_data(self, model, flatten=True):
@@ -165,7 +165,7 @@ class Dataset:
                 predict[j,:,:,i] = self.scalers[i].inverse_transform(predict[j,:,:,i])
             
         if (flatten):
-            predict = predict.reshape(self.predict.shape) 
+            predict = predict.reshape(self.dataY.shape) 
             
         return predict
 

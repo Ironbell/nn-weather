@@ -111,13 +111,14 @@ class Dataset:
         self.frames = self.frames.astype('float32')
         
         nb_params = len(self.params.grib_parameters)
-        self.scalers = np.empty((nb_params))
+        self.scalers = []
         
         # we normalize per grib  parameter
         for i in range(nb_params):
             array = self.frames[:,:,i]
-            self.scalers[i] = max(1.0,array.max())
-            array *= 1.0/self.scalers[i]
+            scaler = MinMaxScaler(feature_range=(0, 1))
+            array = scaler.fit_transform(array)
+            self.scalers.append(scaler)
             self.frames[:,:,i] = array
             
         self.frames = self.frames.reshape(self.frames.shape[0], -1)
@@ -130,14 +131,16 @@ class Dataset:
         dataX = self.dataX.reshape(self.dataX.shape[0], self.dataX.shape[1], self.params.nb_grib_points, nb_params)
         
         for i in range(dataX.shape[3]):
-            dataX[:,:,:,i] *= self.scalers[i]
-        
+            for j in range(dataX.shape[0]):
+                dataX[j,:,:,i] = self.scalers[i].inverse_transform(dataX[j,:,:,i])
+
         if (flatten):
             dataX = dataX.reshape(self.dataX.shape) 
         
         dataY = self.dataY.reshape(self.dataY.shape[0], self.dataY.shape[1], self.params.nb_grib_points, nb_params)
         for i in range(dataY.shape[3]):
-            dataY[:,:,:,i] *= self.scalers[i]
+            for j in range(dataY.shape[0]):
+                dataY[j,:,:,i] = self.scalers[i].inverse_transform(dataY[j,:,:,i])
         
         if (flatten):
             dataY = dataY.reshape(self.dataY.shape) 
@@ -158,7 +161,8 @@ class Dataset:
         predict = predict.reshape(predict.shape[0], predict.shape[1], self.params.nb_grib_points, nb_params)
         
         for i in range(predict.shape[3]):
-            predict[:,:,:,i] *= self.scalers[i]
+             for j in range(predict.shape[0]):
+                predict[j,:,:,i] = self.scalers[i].inverse_transform(predict[j,:,:,i])
             
         if (flatten):
             predict = predict.reshape(self.predict.shape) 

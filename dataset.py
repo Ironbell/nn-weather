@@ -62,16 +62,20 @@ class Dataset:
         self.normalize_frames()
         self.create_samples()
         
-    def include_month(self, dataDate):
+    def include_datetime(self, dataDate, dataTime):
         """ 
-            Returns whether dataDate should be included
+            Returns whether dataDate and dataTime should be included
             with to the months given in the params
             @param dataDate: date as a string/int
+            @param dataTime: time as a string/int
+            @return includeDate, includeTime (boolean)
         """
         dataDate_ = str(dataDate).zfill(8)
+        dataTime_ = str(dataTime).zfill(4)
         month = int(dataDate_[4:6])
+        hour = int(dataTime_[0:2])
 
-        return (month in self.params.months)
+        return (month in self.params.months), (hour in self.params.hours)
         
     def check_params(self, params):
         """ 
@@ -216,7 +220,6 @@ class Dataset:
         if (len(frames) > 0):
             frame_sets.append(np.asarray(frames))
             frames = []
-            self.frames_idx = self.frames_idx[:-self.params.steps_before or None]
         
         self.dataX = np.array([])
         self.dataY = np.array([])
@@ -230,6 +233,12 @@ class Dataset:
         print (self.dataX.shape)
         print ("shape of data Y is:")
         print (self.dataY.shape)
+        
+        print('shape of frames idx is:')
+        print(len(self.frames_idx))
+        
+        print('length of frames data is:')
+        print(len(self.frames_data))
 
 class DatasetArea(Dataset):
     """
@@ -319,10 +328,12 @@ class DatasetArea(Dataset):
                     
                 missingVal = codes_get_double(gids[0], 'missingValue')
                     
-                # check if this matches our month and year
+                # check if this matches our month, year and hour
                 dataDate = codes_get(gids[0], 'dataDate')
-                if not self.include_month(dataDate):
-                    is_new = True
+                dataTime = codes_get(gids[0], 'dataTime')
+                include_date, include_time = self.include_datetime(dataDate, dataTime)
+                if not (include_date and include_time):
+                    is_new = not include_date
                     print 'skipping date: ' + str(dataDate).zfill(8), '            \r',
                     for gid in gids:
                         codes_release(gid)
@@ -347,8 +358,7 @@ class DatasetArea(Dataset):
                     gidIt = gidIt + 1
                 
                 self.frames.append(frame)
-                self.frames_data.append(FrameParameters(dataDate, codes_get(gids[0], 'dataTime'), \
-                is_new))
+                self.frames_data.append(FrameParameters(dataDate, dataTime, is_new))
                 is_new = False 
                
                 for gid in gids:
@@ -461,10 +471,12 @@ class DatasetNearest(Dataset):
                     
                 missingVal = codes_get_double(gids[0], 'missingValue')
                     
-                # check if this matches our month and year
+                # check if this matches our month, year and hour
                 dataDate = codes_get(gids[0], 'dataDate')
-                if not self.include_month(dataDate):
-                    is_new = True
+                dataTime = codes_get(gids[0], 'dataTime')
+                include_date, include_time = self.include_datetime(dataDate, dataTime)
+                if not (include_date and include_time):
+                    is_new = not include_date
                     print 'skipping date: ' + str(dataDate).zfill(8), '            \r',
                     for gid in gids:
                         codes_release(gid)
@@ -485,8 +497,7 @@ class DatasetNearest(Dataset):
                     gidIt = gidIt + 1
             
                 self.frames.append(frame)
-                self.frames_data.append(FrameParameters(dataDate, codes_get(gids[0], 'dataTime'), \
-                is_new))
+                self.frames_data.append(FrameParameters(dataDate, dataTime, is_new))
                 is_new = False 
                
                 for gid in gids:

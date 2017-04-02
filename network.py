@@ -9,21 +9,23 @@ from sklearn.metrics import mean_squared_error
 
 from dataset import *
 
-def create_model(steps_before, feature_count):
+def create_model(steps_before, steps_after, feature_count):
     """ 
         creates, compiles and returns a RNN model 
-        @param steps_before: the number of previous time steps (input). It equals the output.
+        @param steps_before: the number of previous time steps (input). 
+        @param steps_after: the number of posterior time steps (output/forecast).
         @param feature_count: the number of features in the model
     """
     DROPOUT = 0.2
-    LAYERS = 2
-    HIDDEN_NEURONS = 300
+    LAYERS = 3
+    HIDDEN_NEURONS = 100
     
     model = Sequential()  
-    model.add(LSTM(input_dim=feature_count, output_dim=HIDDEN_NEURONS, return_sequences=True))  
+    model.add(LSTM(input_dim=feature_count, output_dim=HIDDEN_NEURONS, return_sequences=False))
+    model.add(RepeatVector(steps_after))
     model.add(Dropout(DROPOUT))
     for _ in range(LAYERS):
-        model.add(LSTM(HIDDEN_NEURONS, return_sequences=True))
+        model.add(LSTM(output_dim=HIDDEN_NEURONS, return_sequences=True))
         model.add(Dropout(DROPOUT))
 
     model.add(TimeDistributed(Dense(feature_count)))
@@ -43,7 +45,7 @@ def train_model(model, dataset, epoch_count, model_folder):
         TODO: maybe specify if the model needs to be saved between epochs?
         TODO: maybe specify a target validation loss? (monitor='val_loss')
     """
-    history = model.fit(dataset.dataX, dataset.dataY, batch_size=4, nb_epoch=epoch_count, validation_split=0.05)
+    history = model.fit(dataset.dataX, dataset.dataY, batch_size=10, nb_epoch=epoch_count, validation_split=0.05)
     
     if not os.path.exists(model_folder):
         os.makedirs(model_folder)
@@ -116,37 +118,64 @@ def evaluate_model(model, dataset, data_type=''):
 
     return predict
     
-def evaluate_model_score(model, dataset, steps_after):
+def evaluate_model_score(model, dataset):
     """ 
         evaluates the model given the dataset and returns
         the avg mean squared error.
         @param model: the model to evaluate_model
         @param dataset: data to evaluate
-        @param steps_after: how many timesteps to consider
         @return arithmetic mean RMSE, std of RMSE, each one per timestep and per feature, shape is (timestep, feature, [0=rmse, 1=mad])
     """
     # make predictions
     predict = dataset.predict_data(model)
     _, dataY = dataset.inverse_transform_data()
 
-    return evaluate_model_score_raw(dataY[:,0:steps_after,:], predict[:,0:steps_after,:])
+    return evaluate_model_score_raw(dataY, predict)
     
 def evaluate_model_score_raw(dataY, predict):
     """ 
         evaluates the model given the dataset and the prediction (both already scaled)
         @param dataY: dataY from the dataset
         @param predict: already predicted data
-        @return arithmetic mean RMSE, std of RMSE, each one per timestep and per feature, shape is (timestep, feature, [0=rmse, 1=mad])
+        @return arithmetic mean RMSE, std of RMSE, each one per timestep and per feature, shape is (timestep, feature, [0=rmse, 1=std])
     """
     # calculate root mean squared error and
-    # mean absolute deviation
-    # scores are (timestep, feature, [0=rmse, 1=mad])
+    # standard deviation
+    # scores are (timestep, feature, [0=rmse, 1=std])
     scores = np.empty((dataY.shape[1], dataY.shape[2], 2))
     for i in range(dataY.shape[1]): # loop over timesteps
         for j in range(dataY.shape[2]): # loop over features
             scores[i, j, 0] = math.sqrt(mean_squared_error(dataY[:,i,j], predict[:,i,j]))
             errors = np.absolute(dataY[:,i,j] - predict[:,i,j])
             scores[i, j, 1] = np.mean(np.absolute(errors - np.mean(errors, axis=0)), axis=0)
+
+    return scores
+    
+def evaluate_model_score_compare(dataY, predict):
+    '''
+        scores are (timestep, feature, [0=mean(squared distance), 1=std(squared distance), 3=mean(absolute distance), 4=std(absolute distance))
+        
+        #d=(x-y).^2;   % SD   (squared distance)
+        #m=mean(d)     % MSD  (mean squared distance, aka. mean squared error MSE)
+        #s=std(d)
+
+        #d=abs(x-y);   % AD   (absolute distance)
+        #m=mean(d)     % MAD  (mean absolute distance)
+        #s=std(d)
+    '''
+    
+    scores = np.empty((dataY.shape[1], dataY.shape[2], 5))
+    for i in range(dataY.shape[1]): # loop over timesteps
+        for j in range(dataY.shape[2]): # loop over features
+            scores[i, j, 4] = math.sqrt(mean_squared_error(dataY[:,i,j], predict[:,i,j]))
+            
+            sd = np.square(dataY[:,i,j] - predict[:,i,j])
+            scores[i, j, 0] = np.mean(sd)
+            scores[i, j, 1] = np.std(sd)
+            
+            ad = np.absolute(dataY[:,i,j] - predict[:,i,j])
+            scores[i, j, 2] = np.mean(ad)
+            scores[i, j, 3] = np.std(ad)
 
     return scores
     

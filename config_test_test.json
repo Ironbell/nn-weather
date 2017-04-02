@@ -11,5 +11,6 @@
     "grib_parameters" : ["temperature"],
     "years" : [2016],
     "months" : [6],
+    "hours" : [0, 6, 12, 18],
     "model_folder" : "weather_model"
 }

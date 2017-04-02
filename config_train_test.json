@@ -11,5 +11,6 @@
     "grib_parameters" : ["temperature"],
     "years" : [2000, 2001],
     "months" : [6, 7, 8],
+    "hours" : [0, 6, 12, 18],
     "model_folder" : "model_test"
 }

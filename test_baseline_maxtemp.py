@@ -1,59 +1,122 @@
 from attrdict import AttrDict
 from keras.models import load_model
 import numpy as np
-np.set_seed
+np.random.seed(1337)
 import matplotlib.pyplot as plt
+
+import os
 
 from keras.models import Sequential
 from keras.layers import Dense, Activation, LSTM, Dropout, RepeatVector, TimeDistributed
 
-EPOCHS = 10
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+
+from attrdict import AttrDict
+
+from eccodes import *
 
 def create_dataset():
     """
         Creates a dataset with 
-        dataX and dataY for training/testing/validation
+        dataX and dataY for training/testing
         with parameters according to the baseline paper.
     """    
+    # load the temperature data from years 1999-2009
+    # don't include the 29. feb
+    # use the maximum from the 4 values per day (maxtemp)
+    years = list(range(1999, 2009))
+    longitude = -79.63 + 180
+    latitude = 43.68
+    grib_folder = '/media/isa/VIS1/temperature/'
+    maxtemp_data = np.empty((365, len(years)))
+
+    # load the data
+    for year_it in range(len(years)):
+        f = open(grib_folder + str(years[year_it]) + '.grib')
+        time_it = 0
+        day_it = 0
+        day_data = np.empty((4))
+        
+        while 1:
+            gid = codes_grib_new_from_file(f)
+            if (gid is None):
+                break
+            # check for feb 29
+            dataDate = str(codes_get(gid, 'dataDate')).zfill(8)
+            if (dataDate[4:6] == '02' and dataDate[6:8] == '29'):
+                codes_release(gid)
+                print ('skipping ' + dataDate)
+                continue
+
+            nearest = codes_grib_find_nearest(gid, latitude, longitude)[0]
+            
+            if (nearest.value == codes_get_double(gid, 'missingValue')):
+                raise Warning('missing value!')
+                
+            day_data[time_it] = nearest.value
+            
+            time_it = time_it + 1
+            if time_it == 4:
+                maxtemp_data[day_it, year_it] = day_data.max()
+                day_it = day_it + 1
+                time_it = 0
+                
+            codes_release(gid)
     
+        f.close()
+        
+    min_data, ptp_data = maxtemp_data.min(), maxtemp_data.ptp()
+    maxtemp_data = (maxtemp_data - min_data) / ptp_data
+        
+    # x: [year0, year1, ...., year9]
+    # y: the next day, ie year9 + 1 day
+    # get x data: x is all samples but the last (it wouldn't have an corresponding y)
+    data_x = maxtemp_data[:-1, :]
+    # get y data: y is the next day
+    data_y = np.empty((364))
+    for d in range(364):
+        data_y[d] = maxtemp_data[d + 1, -1]
+
+    train_x, test_x, train_y, test_y = train_test_split(data_x, data_y, test_size=0.2)
+    
+    dataset = AttrDict()
+    dataset.train_x = train_x
+    dataset.test_x = test_x
+    dataset.train_y = train_y
+    dataset.test_y = test_y
+    dataset.min_data = min_data
+    dataset.ptp_data = ptp_data
+    return dataset
     
 
-def create_model(steps_before, steps_after, feature_count):
+def create_model(nb_layers, nb_neurons, nb_features=10, activation_function='linear'):
     """ 
-        creates, compiles and returns a RNN model 
-        @param steps_before: the number of previous time steps (input)
-        @param steps_after: the number of posterior time steps (output or predictions)
-        @param feature_count: the number of features in the model
-        @param hidden_neurons: the number of hidden neurons per LSTM layer
+        creates, compiles and returns a ANN model 
+        @param nb_layers: how many hidden layers should be used (all dense)
+        @param nb_neurons: how many neurons per hidden layer
+        @param nb_features: how many input features (there are ten in the paper)
+        @param activation_function: according to the paper, this is 'linear' or 'sigmoid'
     """
-    DROPOUT = 0.5
-    LAYERS = 2
-    
-    hidden_neurons = 300
-    '''
-    model = Sequential()  
-    model.add(LSTM(input_dim=feature_count, output_dim=hidden_neurons, return_sequences=False))  
-    model.add(Dense(feature_count))
-    model.add(Activation('linear')) '''  
-    
-    model = Sequential()
-    model.add(LSTM(input_dim=feature_count, output_dim=hidden_neurons, return_sequences=False))
-    model.add(RepeatVector(steps_after))
-    model.add(LSTM(output_dim=hidden_neurons, return_sequences=True))
-    #model.add(LSTM(input_dim=feature_count, output_dim=hidden_neurons, return_sequences=True))
-    model.add(TimeDistributed(Dense(feature_count)))
-    model.add(Activation('linear'))  
+    #DROPOUT = 0.5 # the paper doesn't use dropout (bad!!!)
+
+    model = Sequential() 
+    model.add(Dense(input_dim=nb_features, output_dim=nb_neurons))    
+    for _ in range(nb_layers):
+        model.add(Dense(nb_neurons))
+    model.add(Dense(1))
+    model.add(Activation(activation_function)) 
     
     model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['accuracy'])  
     return model
 
-def train_model(model, dataX, dataY, epoch_count, model_folder):
+def train_model(model, dataX, dataY, nb_epoch, model_folder):
     """ 
-        trains only the sinus model
+        trains the maxtemp model and saves
     """
-    history = model.fit(dataX, dataY, batch_size=1, nb_epoch=epoch_count, validation_split=0.05)
+    history = model.fit(dataX, dataY, batch_size=1, nb_epoch=nb_epoch, validation_split=0.3)
     
-    '''if not os.path.exists(model_folder):
+    if not os.path.exists(model_folder):
         os.makedirs(model_folder)
 
     # save model
@@ -78,76 +141,64 @@ def train_model(model, dataX, dataY, epoch_count, model_folder):
     plt.xlabel('epoch')
     plt.legend(['train', 'test'], loc='upper right')
     plt.savefig(model_folder + '/history_loss.png')
-    plt.cla()'''
-
-def test_model():
-    ''' 
-        testing how well the network can predict
-        a simple sinus wave.
-    '''
-    t = np.arange(0.0, 4.0, 0.02)
-    sinus = np.sin(2 * np.pi * t)
-    sinus = sinus.reshape((sinus.shape[0], 1))
-    n_pre = 50
-    n_post = 10
+    plt.cla()
     
-    dX, dY = [], []
-    for i in range(len(sinus)-n_pre-n_post):
-        dX.append(sinus[i:i+n_pre])
-        dY.append(sinus[i+n_pre:i+n_pre+n_post])
-        #dY.append(sinus[i+n_pre])
-    dataX = np.array(dX)
-    dataY = np.array(dY)
-
-    # create and fit the LSTM network
-    print('creating model...')
-    model = create_model(n_pre, n_post, 1)
-    train_sinus(model, dataX, dataY, EPOCHS, 'test_sinus/model')
+def evaluate_model(model, dataset):
+    """
+        testing how big the MSE is for our test data
+        @param model: the model to test
+        @param dataset: dataset with test_x, test_y and scaler
+        @return: the MSE between prediction and ground truth
+    """
+    predict = model.predict(dataset.test_x)
     
-    # now test
-    t = np.arange(15.0, 19.0, 0.02)
-    sinus = np.sin(2 * np.pi * t)
-    sinus = sinus.reshape((sinus.shape[0], 1))
+    predict = predict * dataset.ptp_data + dataset.min_data
+    test_y = dataset.test_y * dataset.ptp_data + dataset.min_data
     
-    dX, dY = [], []
-    for i in range(len(sinus)-n_pre-n_post):
-        dX.append(sinus[i:i+n_pre])
-        dY.append(sinus[i+n_pre:i+n_pre+n_post])
-        #dY.append(sinus[i+n_pre])
-    dataX = np.array(dX)
-    dataY = np.array(dY)
-    
-    predict = model.predict(dataX)
-    
-    # now plot
-    nan_array = np.empty((n_pre - 1))
-    nan_array.fill(np.nan)
-    nan_array2 = np.empty(n_post)
-    nan_array2.fill(np.nan)
-    ind = np.arange(n_pre + n_post)
-
-    fig, ax = plt.subplots()
-    for i in range(0, 50, 50):
-
-        forecasts = np.concatenate((nan_array, dataX[i, -1:, 0], predict[i, :, 0]))
-        ground_truth = np.concatenate((nan_array, dataX[i, -1:, 0], dataY[i, :, 0]))
-        #forecasts = np.concatenate((nan_array, dataX[i, -1:, 0], predict[i, :]))
-        #ground_truth = np.concatenate((nan_array, dataX[i, -1:, 0], dataY[i, :]))
-        network_input = np.concatenate((dataX[i, :, 0], nan_array2))
-     
-        ax.plot(ind, network_input, 'b-x', label='Network input')
-        ax.plot(ind, forecasts, 'r-x', label='Many to many model forecast')
-        ax.plot(ind, ground_truth, 'g-x', label = 'Ground truth')
-        
-        plt.xlabel('t')
-        plt.ylabel('sin(t)')
-        plt.title('Sinus Many to Many Forecast')
-        plt.legend(loc='best')
-        plt.savefig('test_sinus/plot_mtm_triple_' + str(i) + '.png')
-        plt.cla()
+    mse = mean_squared_error(test_y, predict)
+    return mse
 
 def main():
-    test_sinus()
+    subfolder = 'test_baseline_maxtemp/'
+    dataset = create_dataset()
+    
+    # different number of layers:
+    nb_layers_list = [1, 5, 10]
+    # different number of neurons:
+    nb_neurons_list = [20, 50, 80]
+    # different activation functions:
+    act_functions = ['linear', 'sigmoid']
+
+    for nb_layers in nb_layers_list:
+        results = np.empty(((len(nb_neurons_list) * len(act_functions)), 3))
+        n_it = 0
+        for nb_neurons in nb_neurons_list:
+            act_it = 0
+            for act_func in act_functions:
+                model = create_model(nb_layers=nb_layers, nb_neurons=int(nb_neurons/nb_layers), activation_function=act_func)
+                
+                model_folder = subfolder + 'model_' + str(nb_layers) + '_' + str(nb_neurons) + '_' + act_func
+                train_model(model, dataset.train_x, dataset.train_y, nb_epoch=50, model_folder=model_folder)
+                
+                mse = evaluate_model(model, dataset)
+                results[len(act_functions) * n_it + act_it, 0] = int(nb_neurons/nb_layers)
+                results[len(act_functions) * n_it + act_it, 1] = act_it
+                results[len(act_functions) * n_it + act_it, 2] = mse
+
+                act_it = act_it + 1
+            
+            n_it = n_it + 1
+
+        fig=plt.figure()
+        ax = fig.add_subplot(111)
+        ax.xaxis.set_visible(False)
+        ax.yaxis.set_visible(False)
+        colLabels=('Neurons/Layer', 'Activation Function', 'MSE')
+        the_table = ax.table(cellText=results,
+              colLabels=colLabels,
+              loc='center')
+        plt.savefig(subfolder + 'table_layers_' + str(nb_layers) + '.png')
+    
     return 1
 
 if __name__ == "__main__":

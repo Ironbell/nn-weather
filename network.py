@@ -45,7 +45,7 @@ def train_model(model, dataset, epoch_count, model_folder):
         TODO: maybe specify if the model needs to be saved between epochs?
         TODO: maybe specify a target validation loss? (monitor='val_loss')
     """
-    history = model.fit(dataset.dataX, dataset.dataY, batch_size=10, nb_epoch=epoch_count, validation_split=0.05)
+    history = model.fit(dataset.dataX, dataset.dataY, batch_size=10, epochs=epoch_count, validation_split=0.05)
     
     if not os.path.exists(model_folder):
         os.makedirs(model_folder)

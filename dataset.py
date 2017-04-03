@@ -6,7 +6,7 @@ import os, math, re, gc
 import decimal
 import numpy as np
 import scipy as sp
-from sklearn.preprocessing import MinMaxScaler
+
 from attrdict import AttrDict
 
 from eccodes import *
@@ -115,14 +115,15 @@ class Dataset:
         self.frames = self.frames.astype('float32')
         
         nb_params = len(self.params.grib_parameters)
-        self.scalers = []
+        self.scalers = np.empty((nb_params, 2))
         
         # we normalize per grib  parameter
         for i in range(nb_params):
             array = self.frames[:,:,i]
-            scaler = MinMaxScaler(feature_range=(0, 1))
-            array = scaler.fit_transform(array)
-            self.scalers.append(scaler)
+            min_data, ptp_data = array.min(), array.ptp()
+            array = (array - min_data) / ptp_data
+            self.scalers[i, 0] = min_data
+            self.scalers[i, 1] = ptp_data
             self.frames[:,:,i] = array
             
         self.frames = self.frames.reshape(self.frames.shape[0], -1)
@@ -133,18 +134,16 @@ class Dataset:
         """     
         nb_params = len(self.params.grib_parameters)
         dataX = np.copy(self.dataX.reshape(self.dataX.shape[0], self.dataX.shape[1], self.params.nb_grib_points, nb_params))
-        
+
         for i in range(dataX.shape[3]):
-            for j in range(dataX.shape[0]):
-                dataX[j,:,:,i] = self.scalers[i].inverse_transform(dataX[j,:,:,i])
+            dataX[:,:,:,i] = dataX[:,:,:,i] * self.scalers[i, 1] + self.scalers[i, 0]
 
         if (flatten):
             dataX = dataX.reshape(self.dataX.shape) 
         
         dataY = np.copy(self.dataY.reshape(self.dataY.shape[0], self.dataY.shape[1], self.params.nb_grib_points, nb_params))
         for i in range(dataY.shape[3]):
-            for j in range(dataY.shape[0]):
-                dataY[j,:,:,i] = self.scalers[i].inverse_transform(dataY[j,:,:,i])
+            dataY[:,:,:,i] = dataY[:,:,:,i] * self.scalers[i, 1] + self.scalers[i, 0]
         
         if (flatten):
             dataY = dataY.reshape(self.dataY.shape) 
@@ -165,9 +164,30 @@ class Dataset:
         predict = predict.reshape(predict.shape[0], predict.shape[1], self.params.nb_grib_points, nb_params)
         
         for i in range(predict.shape[3]):
-             for j in range(predict.shape[0]):
-                predict[j,:,:,i] = self.scalers[i].inverse_transform(predict[j,:,:,i])
+            predict[:,:,:,i] = predict[:,:,:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+          
+        if (flatten):
+            predict = predict.reshape(self.dataY.shape) 
             
+        return predict
+        
+    def predict_constant(self, flatten=True):
+        """
+            predicts dataY as constant last element from dataX and unscales it
+            @param flatten: whether to flatten the reshaped data or leave it seperated per grib parameter
+            @return unscaled prediction of shape (nb_samples, steps_after, features)
+        """
+        
+        predict = np.empty(self.dataY.shape)
+        for i in predict.shape[2]:
+            predict[:,i,:] = self.dataX[:,-1,:]
+        
+        nb_params = len(self.params.grib_parameters)
+        predict = predict.reshape(predict.shape[0], predict.shape[1], self.params.nb_grib_points, nb_params)
+        
+        for i in range(predict.shape[3]):
+            predict[:,:,:,i] = predict[:,:,:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+          
         if (flatten):
             predict = predict.reshape(self.dataY.shape) 
             
@@ -255,6 +275,7 @@ class DatasetArea(Dataset):
         @param params.end_lat: the end latitude to consider for the data cropping
         @param params.years: only load data from those years
         @param params.months: only load data from those months
+        @param params.hours: only load data from those hours
     """
     def __init__(self, params):
         Dataset.__init__(self, params)
@@ -391,6 +412,7 @@ class DatasetNearest(Dataset):
         @param params.npoints: how many points to load
         @param params.years: only load data from those years
         @param params.months: only load data from those months
+        @param params.hours: only load data from those hours
     """
     def __init__(self, params):
         Dataset.__init__(self, params)
@@ -515,3 +537,218 @@ class DatasetNearest(Dataset):
         gc.collect()
         print ('frames shape:')
         print (self.frames.shape)
+        
+class DatasetSquareArea(Dataset):
+    """
+        Loads training/test data of a square area around the center from a grid file, shapes and formats it.
+        @param params.steps_before: how many frames before does the network take as input (1 default)
+        @param params.steps_after: how many frames ahead it should predict. (1 default)
+        @param params.forecast_distance: how many frames it should skip when predicting (0 default)
+        @param params.max_frames: the maximum frames to load
+        @param params.grib_folder: the path to the folder holding grib subfolders
+        @param params.grib_parameters: which parameters to consider, for example ['temperature', 'pressure']
+        @param params.lon: the longitude of the center point
+        @param params.lat: the latitude of the center point
+        @param params.radius: the radius around the center
+        @param params.years: only load data from those years
+        @param params.months: only load data from those months
+        @param params.hours: only load data from those hours
+    """
+    def __init__(self, params):
+        Dataset.__init__(self, params)
+        
+    def check_params(self, params):
+        """ 
+            Checks the parameters for validity
+        """
+        Dataset.check_params(self, params)
+
+        if params.lon > 360 or params.lon < 0:
+            raise Exception('longitude must be between 0 and 360')   
+
+        if params.lat > 90 or params.lat < -90:
+            raise Exception('latitude must be between -90 and 90')   
+
+        if params.radius < 0 or params.radius > 10:
+            raise Exception('radius has to be between 0 and 10') 
+
+        params.lat = round_nearest(params.lat, GRID_SIZE)
+        params.lon = round_nearest(params.lon, GRID_SIZE)
+        
+        scaled_radius = params.radius * GRID_SIZE
+        
+        params.start_lat = params.lat - scaled_radius
+        params.end_lat = params.lat + scaled_radius
+        params.start_lon = params.lon - scaled_radius
+        params.end_lon = params.lon + scaled_radius
+
+        params.nb_grib_points = (1 + 2 * params.radius) * (1 + 2 * params.radius)
+        params.nb_features = params.nb_grib_points * len(params.grib_parameters)
+
+        print ('nb features is %i' % params.nb_features)
+        print ('nb grib points is %i' % params.nb_grib_points)
+        print ('parameters are: ')
+        print (params.grib_parameters)
+        self.params = params
+        
+    def load_frames(self):
+        """ 
+            Loads data from the grib file 
+        """
+        self.frames = []
+        self.frames_data = []
+        
+        index = 0
+        is_new = True
+
+        for year in self.params.years:
+            files = []
+            for parameter in self.params.grib_parameters:
+                f = open(self.params.grib_folder + parameter + "/" + str(year) + '.grib')
+                files.append(f)
+                
+            while index <= self.params.max_frames:
+                gc.collect()
+                gids = []
+                for f in files:
+                    gid = codes_grib_new_from_file(f)
+                    gids.append(gid)
+                if gids[0] is None:
+                    break
+                    
+                missingVal = codes_get_double(gids[0], 'missingValue')
+                    
+                # check if this matches our month, year and hour
+                dataDate = codes_get(gids[0], 'dataDate')
+                dataTime = codes_get(gids[0], 'dataTime')
+                include_date, include_time = self.include_datetime(dataDate, dataTime)
+                if not (include_date and include_time):
+                    is_new = not include_date
+                    print 'skipping date: ' + str(dataDate).zfill(8), '            \r',
+                    for gid in gids:
+                        codes_release(gid)
+                    continue
+                
+                diameter = 1 + 2 * self.params.radius
+                    
+                frame = np.empty((diameter, diameter, len(self.params.grib_parameters)))  
+                gidIt = 0
+                for gid in gids:
+
+                    bottomLeft = codes_grib_find_nearest(gid, self.params.start_lat, self.params.start_lon)[0]
+                    topRight = codes_grib_find_nearest(gid, self.params.end_lat, self.params.end_lon)[0]
+                    
+                    latIt = 0
+                    for lat in reversed(list(drange(bottomLeft.lat, topRight.lat + GRID_SIZE, GRID_SIZE))):
+                        lonIt = 0
+                        for lon in drange(bottomLeft.lon, topRight.lon + GRID_SIZE, GRID_SIZE):
+                            nearest = codes_grib_find_nearest(gid, lat, lon)[0]
+                            frame[latIt, lonIt, gidIt] = max(0, nearest.value)
+                            if nearest.value == missingVal:
+                                raise Warning('missing value!')
+
+                            lonIt = lonIt + 1
+                            
+                        latIt = latIt + 1
+                            
+                    gidIt = gidIt + 1
+                
+                self.frames.append(frame)
+                self.frames_data.append(FrameParameters(dataDate, dataTime, is_new))
+                is_new = False 
+               
+                for gid in gids:
+                    codes_release(gid)
+                index = index + 1
+                print 'loading frames: ', index, '                 \r',
+
+            for f in files:
+                f.close()
+            if index > self.params.max_frames:
+                break
+            
+        print ('')
+        self.frames = np.asarray(self.frames)
+        gc.collect()
+        print ('frames shape:')
+        print (self.frames.shape)
+        
+    def normalize_frames(self):
+        """ 
+            Normalizes and reshapes loaded frames 
+        """
+        self.frames = self.frames.astype('float32')
+
+        nb_params = len(self.params.grib_parameters)
+        self.scalers = np.empty((nb_params, 2))
+        
+        # we normalize per grib  parameter
+        for i in range(nb_params):
+            array = self.frames[:,:,:,i]
+            min_data, ptp_data = array.min(), array.ptp()
+            array = (array - min_data) / ptp_data
+            self.scalers[i, 0] = min_data
+            self.scalers[i, 1] = ptp_data
+            self.frames[:,:,:,i] = array
+        
+    def inverse_transform_data(self, flatten=True):
+        """
+            @return unscaled (true) dataX and dataY
+        """     
+        nb_params = len(self.params.grib_parameters)
+        dataX = np.empty(self.dataX.shape)
+
+        for i in range(dataX.shape[4]):
+            dataX[:,:,:,:,i] = self.dataX[:,:,:,:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+
+        dataY = np.empty(self.dataY.shape)
+        for i in range(dataY.shape[1]):
+            dataY[:,i] = self.dataY[:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+      
+        return dataX, dataY
+  
+    def predict_data(self, model, flatten=True):
+        """
+            predicts dataY with the given model
+            using dataX as input and unscales it
+            @param flatten: whether to flatten the reshaped data or leave it seperated per grib parameter
+            @return unscaled prediction of shape (nb_samples, features)
+        """
+        
+        predict = model.predict(self.dataX)
+        
+        nb_params = len(self.params.grib_parameters)
+       
+        for i in range(predict.shape[1]):
+            predict[:,i] = predict[:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+                   
+        return predict
+        
+    def predict_constant(self, flatten=True):
+        """
+            predicts dataY as constant last element from dataX and unscales it
+            @param flatten: whether to flatten the reshaped data or leave it seperated per grib parameter
+            @return unscaled prediction of shape (nb_samples, features)
+        """
+        predict = np.empty(self.dataY.shape)
+        
+        for i in range(predict.shape[1]):
+            predict[:, i] = self.dataX[:, -1, self.params.radius, self.params.radius, i]
+            predict[i, i] = predict * self.scalers[i, 1] + self.scalers[i, 0]
+
+        return predict
+
+    def create_dataset(self, dataset):
+        """ 
+            convert an array of values into a dataset matrix 
+        """
+        steps_before = self.params.steps_before
+        steps_after = self.params.steps_after
+      
+        dataX, dataY = [], []
+        for i in range(len(dataset) - steps_before - steps_after - 1):
+            a = dataset[i:(i + steps_before), :, :]
+            dataX.append(a)
+            dataY.append(dataset[i + steps_before, self.params.radius, self.params.radius, :])
+        return np.array(dataX), np.array(dataY)
+

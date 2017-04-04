@@ -13,7 +13,7 @@ from sklearn.metrics import mean_squared_error
 
 from dataset import *
 
-EPOCHS = 200
+EPOCHS = 20
 #GRIB_FOLDER = '/home/isa/sftp/'
 GRIB_FOLDER = '/media/isa/VIS1/'
 
@@ -109,7 +109,7 @@ def evaluate_model_score_compare(dataY, predict):
 
     return scores
 
-def test_model():
+def test_model(grib_parameters, subfolder_name):
     ''' 
         train the network
     '''
@@ -121,14 +121,14 @@ def test_model():
     train_params.lon = 189.0
     train_params.radius = 2
     train_params.grib_folder = GRIB_FOLDER
-    train_params.grib_parameters = ['temperature']
+    train_params.grib_parameters = grib_parameters
     train_params.months = [1,2,3,4,5,6,7,8,9,10,11,12]
     train_params.years = [1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999]
     train_params.hours = [0, 6, 12, 18]
 
     # train and save the model files
     print ('training started...')
-    model_folder = 'test_conv_lstm/model'
+    model_folder = 'test_conv_lstm/' + subfolder_name + '/model'
     trainData = DatasetSquareArea(train_params)
         
     # create and fit the LSTM network
@@ -136,7 +136,7 @@ def test_model():
     model = create_model(train_params.steps_before, train_params.radius, len(train_params.grib_parameters))
     train_model(model, trainData, EPOCHS, model_folder)
     
-def evaluate_constant_baseline():
+def evaluate_constant_baseline(grib_parameters, subfolder_name):
     ''' 
         evaluation of the constant baseline
     '''
@@ -149,7 +149,7 @@ def evaluate_constant_baseline():
     train_params.lon = 189.0
     train_params.radius = radius
     train_params.grib_folder = GRIB_FOLDER
-    train_params.grib_parameters = ['temperature']
+    train_params.grib_parameters = grib_parameters
     train_params.hours = [0, 6, 12, 18]
 
     # evaluate on whole 2000 and save results
@@ -160,7 +160,7 @@ def evaluate_constant_baseline():
         train_params.months = [month]
         testData = DatasetSquareArea(train_params)
         
-        subfolder = 'test_conv_lstm/constant_baseline/month_' + str(month)
+        subfolder = 'test_conv_lstm/' + subfolder_name + '/month_' + str(month)
         
         if not os.path.exists(subfolder):
             os.makedirs(subfolder)
@@ -208,7 +208,9 @@ def evaluate_constant_baseline():
             plt.savefig(subfolder + '/plot_' + str(i) + '.png')
             plt.cla()
             
-def evaluate_model():
+            plt.close('all')
+            
+def evaluate_model(grib_parameters, subfolder_name):
     ''' 
         evaluation of the model
     '''
@@ -221,20 +223,20 @@ def evaluate_model():
     train_params.lon = 189.0
     train_params.radius = radius
     train_params.grib_folder = GRIB_FOLDER
-    train_params.grib_parameters = ['temperature']
+    train_params.grib_parameters = grib_parameters
     train_params.hours = [0, 6, 12, 18]
 
     # evaluate on whole 2000 and save results
     train_params.years = [2000]
     months = [1,2,3,4,5,6,7,8,9,10,11,12]
     
-    model = load_model('test_conv_lstm/model/model.h5')
+    model = load_model('test_conv_lstm/' + subfolder_name + '/model/model.h5')
 
     for month in months:
         train_params.months = [month]
         testData = DatasetSquareArea(train_params)
         
-        subfolder = 'test_conv_lstm/temperature/month_' + str(month)
+        subfolder = 'test_conv_lstm/' + subfolder_name + '/month_' + str(month)
         
         if not os.path.exists(subfolder):
             os.makedirs(subfolder)
@@ -247,6 +249,11 @@ def evaluate_model():
         np.save(subfolder + '/score.npy', score)
         print('score shape:')
         print(score.shape)
+        
+        #and, a small boxplot
+        plt.cla()
+        plt.boxplot(np.abs(dataY[:, 0] - predict[:, 0]))
+        plt.savefig(subfolder + '/boxplot.png')
 
         # plot the first results as a sanity check
         nb_results = min(10, predict.shape[0])
@@ -281,6 +288,8 @@ def evaluate_model():
             plt.legend(loc='best')
             plt.savefig(subfolder + '/plot_' + str(i) + '.png')
             plt.cla()
+        
+        plt.close('all')
 
 def plot_comparision():
     """
@@ -295,25 +304,31 @@ def plot_comparision():
     for month in months:
 
         temp_score = np.load('test_conv_lstm/' + 'temperature' + '/month_' + str(month) + '/score.npy')
+        temp_press_score = np.load('test_conv_lstm/' + 'temperature_pressure' + '/month_' + str(month) + '/score.npy')
         constant_score = np.load('test_conv_lstm/' + 'constant_baseline' + '/month_' + str(month) + '/score.npy')
 
         # temp comparision 
-        ax.errorbar(ind, temp_score[0], yerr=temp_score[1], fmt='-o', label='Temperature')
-        ax.errorbar(ind, constant_score[0], yerr=constant_score[1], fmt='-o', label='Constant baseline')
+        ax.errorbar(ind, temp_score[0,2], yerr=temp_score[0,3], fmt='-o', label='Temperature')
+        ax.errorbar(ind, temp_press_score[0,2], yerr=temp_press_score[0,3], fmt='-o', label='Temperature with Pressure')
+        ax.errorbar(ind, constant_score[0,2], yerr=constant_score[0,3], fmt='-o', label='Constant baseline')
        
         plt.xlabel('Forecast Steps')
         plt.ylabel('RMSE (Kelvin)')
         plt.title('Compare temperature forecast models (' + str(month) + '-' + str(year) + ')')
         plt.legend(loc='best')
-        plt.savefig("test_conv_lstm/plots/plot_temperature" + str(month) + ".png")
+        plt.savefig("test_conv_lstm/plots/plot_temperature_pressure" + str(month) + ".png")
         
         plt.cla()
+        
+    plt.close('all')
  
 def main():
-    test_model()
-    evaluate_model()
-    evaluate_constant_baseline()
-    plot_comparision()
+    #test_model(['temperature'], 'temperature')
+    #evaluate_model(['temperature'], 'temperature')
+    #test_model(['temperature', 'pressure'], 'temperature_pressure')
+    evaluate_model(['temperature', 'pressure'], 'temperature_pressure')
+    #evaluate_constant_baseline(['temperature'], 'constant_baseline')
+    #plot_comparision()
     return 1
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ def test_features(grib_parameters, subfolder_name):
 
     # train and save the model files
     print ('training started...')
-    model_folder = 'test_multiple_parameters/' + subfolder_name + '/model'
+    model_folder = 'test_conv_lstm/' + subfolder_name + '/model'
     trainData = DatasetNearest(train_params)
         
     # create and fit the LSTM network
@@ -110,6 +110,8 @@ def evaluate_constant_baseline(grib_parameters, subfolder_name):
                 plt.legend(loc='best')
                 plt.savefig(subfolder + '/plot_' + testData.params.grib_parameters[j] + str(i) + '.png')
                 plt.cla()
+                
+            plt.close('all')
 
 def evaluate_features(grib_parameters, subfolder_name):
     ''' 
@@ -185,6 +187,8 @@ def evaluate_features(grib_parameters, subfolder_name):
                 plt.savefig(subfolder + '/plot_' + testData.params.grib_parameters[j] + str(i) + '.png')
                 plt.cla()
                 
+            plt.close('all')
+                
 def plot_comparision():
     """
         plot our three results and compare them
@@ -228,6 +232,8 @@ def plot_comparision():
         plt.savefig("test_multiple_parameters/plots/plot_pressure" + str(month) + ".png")
         
         plt.cla()
+    
+    plt.close('all')
         
 def plot_score_comparision():
     """
@@ -258,14 +264,16 @@ def plot_score_comparision():
         plt.savefig("test_multiple_parameters/plots/plot_scoremeasures" + str(month) + ".png")
         
         plt.cla()
+        
+    plt.close('all') 
 
 def main():
     #test_features(['temperature'], 'temperature_only')
     #evaluate_features(['temperature'], 'temperature_only')
     #test_features(['pressure'], 'pressure_only')
     #evaluate_features(['pressure'], 'pressure_only')
-    test_features(['temperature', 'pressure'], 'temperature_pressure')
-    evaluate_features(['temperature', 'pressure'], 'temperature_pressure')
+    #test_features(['temperature', 'pressure'], 'temperature_pressure')
+    #evaluate_features(['temperature', 'pressure'], 'temperature_pressure')
     evaluate_constant_baseline(['temperature', 'pressure'], 'constant_baseline')
     plot_comparision()
     plot_score_comparision()

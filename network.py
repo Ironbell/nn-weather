@@ -25,7 +25,7 @@ def create_model(steps_before, steps_after, feature_count):
     model.add(RepeatVector(steps_after))
     model.add(Dropout(DROPOUT))
     for _ in range(LAYERS):
-        model.add(LSTM(output_dim=HIDDEN_NEURONS, return_sequences=True))
+        model.add(LSTM(units=HIDDEN_NEURONS, return_sequences=True))
         model.add(Dropout(DROPOUT))
 
     model.add(TimeDistributed(Dense(feature_count)))

@@ -22,6 +22,8 @@ def plot_predictions(dataset, trainPredict, testPredict):
     plt.plot(testPredictPlot)
     plt.show()
     
+    plt.close('all')
+    
 def plot_predictions_images(dataset, predict, folder_name, max_frames):
     steps_before = dataset.params.steps_before
     
@@ -79,6 +81,7 @@ def plot_predictions_images(dataset, predict, folder_name, max_frames):
         plt.colorbar()'''
         
         plt.savefig(folder_name + ('%i_animate.png' % (i + 1)), bbox_inches='tight',dpi=100)   
+        plt.close('all')
 
 def display_score(score):
     colmap = cm.RdYlGn_r(10)
@@ -93,4 +96,5 @@ def display_score(score):
     cb = plt.colorbar()
     cb.set_label('Avg RMSE (Kelvin)', rotation=270, labelpad=20)
     plt.show()
+    plt.close('all')
 

@@ -179,7 +179,7 @@ class Dataset:
         """
         
         predict = np.empty(self.dataY.shape)
-        for i in predict.shape[2]:
+        for i in range(predict.shape[1]):
             predict[:,i,:] = self.dataX[:,-1,:]
         
         nb_params = len(self.params.grib_parameters)
@@ -734,7 +734,7 @@ class DatasetSquareArea(Dataset):
         
         for i in range(predict.shape[1]):
             predict[:, i] = self.dataX[:, -1, self.params.radius, self.params.radius, i]
-            predict[i, i] = predict * self.scalers[i, 1] + self.scalers[i, 0]
+            predict[:, i] = predict[:, i] * self.scalers[i, 1] + self.scalers[i, 0]
 
         return predict
 

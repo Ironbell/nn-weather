@@ -193,7 +193,6 @@ def plot_comparision():
     """
         plot our three results and compare them
     """
-    runs = ['temperature_only', 'pressure_only', 'temperature_pressure']
     months = [1,2,3,4,5,6,7,8,9,10,11,12]
     year = 2000
     

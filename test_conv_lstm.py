@@ -16,6 +16,8 @@ from dataset import *
 EPOCHS = 20
 #GRIB_FOLDER = '/home/isa/sftp/'
 GRIB_FOLDER = '/media/isa/VIS1/'
+STEPS_BEFORE = 20
+RADIUS = 2
 
 def create_model(steps_before, radius, nb_features):
     """ 
@@ -24,7 +26,7 @@ def create_model(steps_before, radius, nb_features):
         @param radius: the radius of the square around the feature of interest
     """
     DROPOUT = 0.2
-    HIDDEN_NEURONS = 128
+    HIDDEN_NEURONS = 64
     diameter = 1 + 2 * radius
 
     model = Sequential()
@@ -35,7 +37,9 @@ def create_model(steps_before, radius, nb_features):
     model.add(TimeDistributed(Dense(HIDDEN_NEURONS)))
     model.add(LSTM(HIDDEN_NEURONS, return_sequences=True))
     model.add(Dropout(DROPOUT))
-    model.add(LSTM(HIDDEN_NEURONS, return_sequences=False))
+    #model.add(LSTM(HIDDEN_NEURONS, return_sequences=True))
+    #model.add(Dropout(DROPOUT))
+    #model.add(LSTM(HIDDEN_NEURONS, return_sequences=False))
     model.add(Dense(nb_features))
     
     model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['accuracy'])  
@@ -114,12 +118,12 @@ def test_model(grib_parameters, subfolder_name):
         train the network
     '''
     train_params = AttrDict()
-    train_params.steps_before = 20
+    train_params.steps_before = STEPS_BEFORE
     train_params.forecast_distance = 0
     train_params.steps_after = 1
     train_params.lat = 47.25
     train_params.lon = 189.0
-    train_params.radius = 2
+    train_params.radius = RADIUS
     train_params.grib_folder = GRIB_FOLDER
     train_params.grib_parameters = grib_parameters
     train_params.months = [1,2,3,4,5,6,7,8,9,10,11,12]
@@ -140,14 +144,13 @@ def evaluate_constant_baseline(grib_parameters, subfolder_name):
     ''' 
         evaluation of the constant baseline
     '''
-    radius = 2
     train_params = AttrDict()
-    train_params.steps_before = 20
+    train_params.steps_before = STEPS_BEFORE
     train_params.forecast_distance = 0
     train_params.steps_after = 1
     train_params.lat = 47.25
     train_params.lon = 189.0
-    train_params.radius = radius
+    train_params.radius = RADIUS
     train_params.grib_folder = GRIB_FOLDER
     train_params.grib_parameters = grib_parameters
     train_params.hours = [0, 6, 12, 18]
@@ -171,8 +174,9 @@ def evaluate_constant_baseline(grib_parameters, subfolder_name):
         
         score = evaluate_model_score_compare(dataY, predict) 
         np.save(subfolder + '/score.npy', score)
-        print('score shape:')
-        print(score.shape)
+        
+        # save the error
+        np.save(subfolder + '/error.npy', np.abs(dataY[:, :] - predict[:, :]))
 
         # plot the first results as a sanity check
         nb_results = min(10, predict.shape[0])
@@ -193,9 +197,9 @@ def evaluate_constant_baseline(grib_parameters, subfolder_name):
             # plot temperature forecasts
             fig, ax = plt.subplots()
 
-            forecasts = np.concatenate((nan_array, dataX[i, -1:, radius, radius, 0], predict[i:i+1, 0]))
-            ground_truth = np.concatenate((nan_array, dataX[i, -1:, radius, radius, 0], dataY[i:i+1, 0]))
-            network_input = np.concatenate((dataX[i, :, radius, radius, 0], nan_array2))
+            forecasts = np.concatenate((nan_array, dataX[i, -1:, RADIUS, RADIUS, 0], predict[i:i+1, 0]))
+            ground_truth = np.concatenate((nan_array, dataX[i, -1:, RADIUS, RADIUS, 0], dataY[i:i+1, 0]))
+            network_input = np.concatenate((dataX[i, :, RADIUS, RADIUS, 0], nan_array2))
          
             ax.plot(ind, network_input, 'b-x', label='Network input')
             ax.plot(ind, forecasts, 'r-x', label='Constant forecast')
@@ -214,14 +218,13 @@ def evaluate_model(grib_parameters, subfolder_name):
     ''' 
         evaluation of the model
     '''
-    radius = 2
     train_params = AttrDict()
-    train_params.steps_before = 20
+    train_params.steps_before = STEPS_BEFORE
     train_params.forecast_distance = 0
     train_params.steps_after = 1
     train_params.lat = 47.25
     train_params.lon = 189.0
-    train_params.radius = radius
+    train_params.radius = RADIUS
     train_params.grib_folder = GRIB_FOLDER
     train_params.grib_parameters = grib_parameters
     train_params.hours = [0, 6, 12, 18]
@@ -241,19 +244,16 @@ def evaluate_model(grib_parameters, subfolder_name):
         if not os.path.exists(subfolder):
             os.makedirs(subfolder)
         
+        # save the score
         predict = testData.predict_data(model, flatten=False)
         dataX, dataY = testData.inverse_transform_data(flatten=False)
         np.save(subfolder + '/prediction.npy', predict)
         
         score = evaluate_model_score_compare(dataY, predict) 
         np.save(subfolder + '/score.npy', score)
-        print('score shape:')
-        print(score.shape)
-        
-        #and, a small boxplot
-        plt.cla()
-        plt.boxplot(np.abs(dataY[:, 0] - predict[:, 0]))
-        plt.savefig(subfolder + '/boxplot.png')
+
+        # save the error
+        np.save(subfolder + '/error.npy', np.abs(dataY[:, :] - predict[:, :]))
 
         # plot the first results as a sanity check
         nb_results = min(10, predict.shape[0])
@@ -274,9 +274,9 @@ def evaluate_model(grib_parameters, subfolder_name):
             # plot temperature forecasts
             fig, ax = plt.subplots()
 
-            forecasts = np.concatenate((nan_array, dataX[i, -1:, radius, radius, 0], predict[i:i+1, 0]))
-            ground_truth = np.concatenate((nan_array, dataX[i, -1:, radius, radius, 0], dataY[i:i+1, 0]))
-            network_input = np.concatenate((dataX[i, :, radius, radius, 0], nan_array2))
+            forecasts = np.concatenate((nan_array, dataX[i, -1:, RADIUS, RADIUS, 0], predict[i:i+1, 0]))
+            ground_truth = np.concatenate((nan_array, dataX[i, -1:, RADIUS, RADIUS, 0], dataY[i:i+1, 0]))
+            network_input = np.concatenate((dataX[i, :, RADIUS, RADIUS, 0], nan_array2))
          
             ax.plot(ind, network_input, 'b-x', label='Network input')
             ax.plot(ind, forecasts, 'r-x', label='Model forecast')
@@ -305,18 +305,64 @@ def plot_comparision():
 
         temp_score = np.load('test_conv_lstm/' + 'temperature' + '/month_' + str(month) + '/score.npy')
         temp_press_score = np.load('test_conv_lstm/' + 'temperature_pressure' + '/month_' + str(month) + '/score.npy')
+        temp_press_wind_score = np.load('test_conv_lstm/' + 'temperature_pressure_wind' + '/month_' + str(month) + '/score.npy')
+        temp_press_dew_score = np.load('test_conv_lstm/' + 'temperature_pressure_dew' + '/month_' + str(month) + '/score.npy')
         constant_score = np.load('test_conv_lstm/' + 'constant_baseline' + '/month_' + str(month) + '/score.npy')
 
         # temp comparision 
+        ax.errorbar(ind, constant_score[0,2], yerr=constant_score[0,3], fmt='-o', label='Constant baseline')
         ax.errorbar(ind, temp_score[0,2], yerr=temp_score[0,3], fmt='-o', label='Temperature')
         ax.errorbar(ind, temp_press_score[0,2], yerr=temp_press_score[0,3], fmt='-o', label='Temperature with Pressure')
-        ax.errorbar(ind, constant_score[0,2], yerr=constant_score[0,3], fmt='-o', label='Constant baseline')
-       
+        ax.errorbar(ind, temp_press_wind_score[0,2], yerr=temp_press_wind_score[0,3], fmt='-o', label='Temperature with Pressure and Winds')
+        ax.errorbar(ind, temp_press_dew_score[0,2], yerr=temp_press_dew_score[0,3], fmt='-o', label='Temperature with Pressure and Dewpoint')
+
         plt.xlabel('Forecast Steps')
         plt.ylabel('RMSE (Kelvin)')
         plt.title('Compare temperature forecast models (' + str(month) + '-' + str(year) + ')')
         plt.legend(loc='best')
-        plt.savefig("test_conv_lstm/plots/plot_temperature_pressure" + str(month) + ".png")
+        plt.savefig("test_conv_lstm/plots/score_plot" + str(month) + ".png")
+        
+        plt.cla()
+        
+        # boxplots
+        temp_error = np.load('test_conv_lstm/' + 'temperature' + '/month_' + str(month) + '/error.npy')
+        temp_press_error = np.load('test_conv_lstm/' + 'temperature_pressure' + '/month_' + str(month) + '/error.npy')
+        temp_press_wind_error = np.load('test_conv_lstm/' + 'temperature_pressure_wind' + '/month_' + str(month) + '/error.npy')
+        temp_press_dew_error = np.load('test_conv_lstm/' + 'temperature_pressure_dew' + '/month_' + str(month) + '/error.npy')
+        constant_error = np.load('test_conv_lstm/' + 'constant_baseline' + '/month_' + str(month) + '/error.npy')
+        
+        data = [constant_error[:,0], temp_error[:,0], temp_press_error[:,0], temp_press_wind_error[:,0], temp_press_dew_error[:,0]]
+        plt.boxplot(data)
+        plt.xticks([1, 2, 3, 4, 5], ['Constant', 'Temp', 'Temp/Press', 'Temp/Press/Wind', 'Temp/Press/Dew'])
+        plt.title('Compare temperature forecast models (' + str(month) + '-' + str(year) + ')')
+        plt.ylabel('Error (Kelvin)')
+        plt.savefig("test_conv_lstm/plots/boxplot_" + str(month) + ".png")
+        
+        plt.cla()
+        
+    plt.close('all')
+    
+def compare_2():
+    """
+        plot our results and compare them
+    """
+    months = [1,2,3,4,5,6,7,8,9,10,11,12]
+    year = 2000
+    
+    ind = np.arange(1)
+    
+    fig, ax = plt.subplots()
+    for month in months:
+
+        # boxplots
+        temp_press_error = np.load('test_conv_lstm/' + 'temperature_pressure' + '/month_' + str(month) + '/error.npy')
+        temp_press_error_16 = np.load('test_conv_lstm/' + 'temperature_pressure_16' + '/month_' + str(month) + '/error.npy')
+        data = [temp_press_error[:,0], temp_press_error_16[:,0]]
+        plt.boxplot(data)
+        plt.xticks([1, 2], ['Temp/Press 8', 'Temp/Press 16'])
+        plt.title('Compare temperature forecast models (' + str(month) + '-' + str(year) + ')')
+        plt.ylabel('Error (Kelvin)')
+        plt.savefig("test_conv_lstm/plots/boxplot_comp_" + str(month) + ".png")
         
         plt.cla()
         
@@ -325,10 +371,15 @@ def plot_comparision():
 def main():
     #test_model(['temperature'], 'temperature')
     #evaluate_model(['temperature'], 'temperature')
-    #test_model(['temperature', 'pressure'], 'temperature_pressure')
-    evaluate_model(['temperature', 'pressure'], 'temperature_pressure')
+    test_model(['temperature', 'pressure'], 'temperature_pressure_16')
+    evaluate_model(['temperature', 'pressure'], 'temperature_pressure_16')
+    #test_model(['temperature', 'pressure', 'wind_u', 'wind_v'], 'temperature_pressure_wind')
+    #evaluate_model(['temperature', 'pressure', 'wind_u', 'wind_v'], 'temperature_pressure_wind')
+    #test_model(['temperature', 'pressure', 'dewpoint_temperature'], 'temperature_pressure_dew')
+    #evaluate_model(['temperature', 'pressure', 'dewpoint_temperature'], 'temperature_pressure_dew')
     #evaluate_constant_baseline(['temperature'], 'constant_baseline')
     #plot_comparision()
+    compare_2()
     return 1
 
 if __name__ == "__main__":

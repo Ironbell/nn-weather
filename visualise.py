@@ -83,16 +83,16 @@ def plot_predictions_images(dataset, predict, folder_name, max_frames):
         plt.savefig(folder_name + ('%i_animate.png' % (i + 1)), bbox_inches='tight',dpi=100)   
         plt.close('all')
 
-def display_score(score):
+def display_score(score, extent, file_path):
     colmap = cm.RdYlGn_r(10)
     score = np.fliplr(score.transpose())
     
-    plt.imshow(score, cmap=colmap, interpolation='none', extent=[2000,2016,1,12])
+    plt.imshow(score, cmap=colmap, interpolation='none', extent=extent)
 
     plt.xlabel('Years')
     plt.ylabel('Months')
     plt.title('Error comparision over temperature data')
-    plt.savefig("test.png")
+    plt.savefig(file_path)
     cb = plt.colorbar()
     cb.set_label('Avg RMSE (Kelvin)', rotation=270, labelpad=20)
     plt.show()

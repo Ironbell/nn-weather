@@ -26,8 +26,8 @@ def get_default_data_params():
     params.lat = 47.25
     params.lon = 8.25
     params.radius = RADIUS
-    params.grib_parameters = ['temperature']
-    params.months = [7, 8, 9]
+    params.grib_parameters = ['temperature', 'pressure']
+    params.months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     params.years = TRAIN_YEARS
     params.hours = [0, 6, 12, 18]
     return params

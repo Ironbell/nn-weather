@@ -20,8 +20,8 @@ def get_default_model_params():
     params.dropout = 0.2
     params.conv_filters = 8
     params.conv_filter_size = 2
-    params.lstm_neurons = 16
-    params.dense_neurons = 32
+    params.lstm_neurons = 64
+    params.dense_neurons = 64
     params.activation = 'linear'
     return params
 
@@ -46,9 +46,13 @@ def create_model(model_params, data_params):
     for i in range(model_params.lstm_layers):
         model.add(LSTM(model_params.lstm_neurons, return_sequences=(i == model_params.lstm_layers)))
         model.add(Dropout(model_params.dropout))
-   
-    model.add(Dense(nb_features))
-    model.add(Activation(model_params.activation))   
+        
+    model.add(RepeatVector(data_params.steps_after))
+    
+    model.add(LSTM(model_params.lstm_neurons, return_sequences=True))
+
+    model.add(TimeDistributed(Dense(nb_features)))
+    model.add(TimeDistributed(Activation(model_params.activation)))  
     
     model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['accuracy'])  
     return model
@@ -61,7 +65,7 @@ def train_model(model, dataset, epoch_count, model_folder):
         @param epoch_count: number of epochs to train
         @param model_folder: the trained model as well as plots for the training history are saved there
     """
-    history = model.fit(dataset.dataX, dataset.dataY, batch_size=10, epochs=epoch_count, validation_split=0.05)
+    history = model.fit(dataset.dataX, dataset.dataY, batch_size=2, epochs=epoch_count, validation_split=0.05)
     
     if not os.path.exists(model_folder):
         os.makedirs(model_folder)
@@ -153,7 +157,7 @@ def evaluate_model_score_raw(dataY, predict):
         evaluates the model given the dataset and the prediction (both already scaled)
         @param dataY: dataY from the dataset
         @param predict: already predicted data
-        @return mean absolute error, std of absolute error each one per timestep and per feature, shape is (timestep, feature, [0=mean, 1=std])
+        @return mean absolute error, std of absolute error each one per timestep and per feature, shape is (feature, [0=mean, 1=std])
     """
     scores = np.empty((dataY.shape[1], dataY.shape[2], 2))
     for i in range(dataY.shape[1]): # loop over timesteps

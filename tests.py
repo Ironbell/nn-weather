@@ -1,3 +1,4 @@
+import os
 from attrdict import AttrDict
 from keras.models import load_model
 import numpy as np
@@ -7,62 +8,83 @@ from dataset import *
 from network import *
 from visualise import *
 
-def test_nb_features():
+EPOCHS = 20
+#GRIB_FOLDER = '/home/isa/sftp/'
+GRIB_FOLDER = '/media/isa/VIS1/'
+STEPS_BEFORE = 20
+RADIUS = 2
+TEST_YEARS = [2016]
+TRAIN_YEARS = [2010, 2011, 2012, 2013, 2014, 2015]
+
+def get_default_data_params():
+    params = AttrDict()
+    params.steps_before = 20
+    params.steps_after = 1
+    params.grib_folder = GRIB_FOLDER
+    params.forecast_distance = 0
+    params.steps_after = 1
+    params.lat = 47.25
+    params.lon = 8.25
+    params.radius = RADIUS
+    params.grib_parameters = ['temperature']
+    params.months = [7, 8, 9]
+    params.years = TRAIN_YEARS
+    params.hours = [0, 6, 12, 18]
+    return params
+
+def test_nb_radius():
     ''' 
         trains a network with different number of features 
         compares and visualises the prediction error
     '''
-    train_params = AttrDict()
-    train_params.steps_before = 8
-    train_params.grib_folder = '/media/isa/VIS1/temperature/'
-    train_params.months = [6,7,8]
-    epoch_count = 10
+    subfolder = 'test_nb_radius'
+    if not os.path.exists(subfolder):
+        os.makedirs(subfolder)
 
-    nb_features_list = [1, 3, 5, 9, 16, 25, 40]
+    train_params = get_default_data_params()
+    model_params = get_default_model_params()
 
-    results = np.zeros((len(nb_features_list), 3))
+    nb_radius_list = [0, 1, 2, 3, 4]
+
+    results = np.zeros((len(nb_radius_list), 3))
     results_it = 0
     
     #train and save the model files
     print ('training started...')
-    for nb_features in nb_features_list:
+    for nb_radius in nb_radius_list:
+        train_params.radius = nb_radius
+        train_params.years = TRAIN_YEARS
        
-        train_params.lat = 47.25
-        train_params.lon = 189.0
-        train_params.npoints = nb_features
-        train_params.years = [2000,2001,2002]
-
-        # load the data from the .grib files
-        trainData = DatasetNearest(train_params)
-        model_file = 'test_nb_features/model_features_' + str(nb_features) + '.h5'
+        trainData = DatasetSquareArea(train_params)
+        model_folder = subfolder + '/model_' + str(nb_radius) 
         
-        # create and fit the LSTM network
-        print('creating model for features: ' + str(nb_features))
-        model = create_model(train_params.steps_before, nb_features, nb_features * 10)
-        train_model(model, trainData, epoch_count)
-        model.save(model_file)
-        
+        # create and fit the network
+        print('creating model for radius: ' + str(nb_radius))
+        model = create_model(model_params, train_params)
+        train_model(model, trainData, EPOCHS, model_folder)
+       
         # now evaluate
-        train_params.years = [2003]
-        testData = DatasetNearest(train_params)
+        train_params.years = TEST_YEARS
+        testData = DatasetSquareArea(train_params)
         
-        print('testing model for features: ' + str(nb_features))
-        avg_1, avg_all = evaluate_model_score_2(model, testData)
-        results[results_it] = (nb_features, avg_1, avg_all)
+        print('testing model for radius: ' + str(nb_radius))
+        score = evaluate_model_score(model, testData)
+        results[results_it] = (nb_radius, score[0, 0, 0], score[0, 0, 1])
+        
         results_it = results_it + 1
-        np.save('test_nb_features/results.npy', results)
+        np.save(subfolder + '/results.npy', results)
        
     # plot
-    plt.plot(results[:,0], results[:,1], label='Avg error of central feature')
-    plt.plot(results[:,0], results[:,2], label='Avg error of all features')
-
-    plt.xlabel('# Features')
-    plt.ylabel('RMSE (Kelvin)')
-    plt.title('Number of Features')
-    plt.legend(loc='upper right')
+    plt.errorbar(results[:,0], results[:,1], yerr=results[:,2], fmt='o')
+   
+    plt.xlabel('Radius')
+    plt.xticks(results[:,0])
+    plt.ylabel('Error (Kelvin)')
+    plt.title('Radius')
+    #plt.legend(loc='best')
     plt.grid(True)
-    plt.savefig("test_nb_features/plot.png")
-    plt.show()
+    plt.savefig(subfolder + '/plot.png')
+    plt.close('all')
 
 def test_nb_neurons():
     ''' 
@@ -423,7 +445,7 @@ def evaluate_forecast_distance():
         plt.savefig("test_forecast_distance_2/plot" + str(i) + ".png")
         
 def main():
-    #test_nb_features()
+    test_nb_radius()
     #test_nb_neurons()
     #test_steps_before()
     #test_network_depth()

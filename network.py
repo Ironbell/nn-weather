@@ -4,32 +4,51 @@ import matplotlib.pyplot as plt
 import json, attrdict
 
 from keras.models import Sequential
-from keras.layers import Dense, Activation, LSTM, Dropout, RepeatVector, TimeDistributed
+from keras.layers import Dense, Activation, LSTM, Dropout, TimeDistributed, Flatten, RepeatVector
+from keras.layers.convolutional import Conv2D
+from keras.layers.pooling import MaxPooling2D
 from sklearn.metrics import mean_squared_error
 
 from dataset import *
 
-def create_model(steps_before, steps_after, feature_count):
+def get_default_model_params():
+    '''
+        returns the default params for a model.
+    '''
+    params = AttrDict()
+    params.lstm_layers = 1
+    params.dropout = 0.2
+    params.conv_filters = 8
+    params.conv_filter_size = 2
+    params.lstm_neurons = 16
+    params.dense_neurons = 32
+    params.activation = 'linear'
+    return params
+
+def create_model(model_params, data_params):
     """ 
-        creates, compiles and returns a RNN model 
-        @param steps_before: the number of previous time steps (input). 
-        @param steps_after: the number of posterior time steps (output/forecast).
-        @param feature_count: the number of features in the model
+        creates, compiles and returns a CNN + RNN model 
+        @param model_params: parameters for the model
+        @param data_params: parameters for the dataset
     """
-    DROPOUT = 0.2
-    LAYERS = 3
-    HIDDEN_NEURONS = 100
+    diameter = 1 + 2 * data_params.radius
+    nb_features = len(data_params.grib_parameters)
     
     model = Sequential()  
-    model.add(LSTM(input_dim=feature_count, output_dim=HIDDEN_NEURONS, return_sequences=False))
-    model.add(RepeatVector(steps_after))
-    model.add(Dropout(DROPOUT))
-    for _ in range(LAYERS):
-        model.add(LSTM(units=HIDDEN_NEURONS, return_sequences=True))
-        model.add(Dropout(DROPOUT))
+    model.add(TimeDistributed(Conv2D(filters=model_params.conv_filters, kernel_size=(model_params.conv_filter_size, model_params.conv_filter_size), padding='same', input_shape=(diameter, diameter, nb_features)), input_shape=(data_params.steps_before, diameter, diameter, nb_features)))
+    
+    if (diameter > 1):
+        model.add(TimeDistributed(MaxPooling2D(pool_size=(2, 2))))
+  
+    model.add(TimeDistributed(Flatten()))
+    model.add(TimeDistributed(Dense(model_params.dense_neurons)))
 
-    model.add(TimeDistributed(Dense(feature_count)))
-    model.add(Activation('linear'))   
+    for i in range(model_params.lstm_layers):
+        model.add(LSTM(model_params.lstm_neurons, return_sequences=(i == model_params.lstm_layers)))
+        model.add(Dropout(model_params.dropout))
+   
+    model.add(Dense(nb_features))
+    model.add(Activation(model_params.activation))   
     
     model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['accuracy'])  
     return model
@@ -41,9 +60,6 @@ def train_model(model, dataset, epoch_count, model_folder):
         @param dataset: the dataset to train the model on
         @param epoch_count: number of epochs to train
         @param model_folder: the trained model as well as plots for the training history are saved there
-        
-        TODO: maybe specify if the model needs to be saved between epochs?
-        TODO: maybe specify a target validation loss? (monitor='val_loss')
     """
     history = model.fit(dataset.dataX, dataset.dataY, batch_size=10, epochs=epoch_count, validation_split=0.05)
     
@@ -137,20 +153,17 @@ def evaluate_model_score_raw(dataY, predict):
         evaluates the model given the dataset and the prediction (both already scaled)
         @param dataY: dataY from the dataset
         @param predict: already predicted data
-        @return arithmetic mean RMSE, std of RMSE, each one per timestep and per feature, shape is (timestep, feature, [0=rmse, 1=std])
+        @return mean absolute error, std of absolute error each one per timestep and per feature, shape is (timestep, feature, [0=mean, 1=std])
     """
-    # calculate root mean squared error and
-    # standard deviation
-    # scores are (timestep, feature, [0=rmse, 1=std])
     scores = np.empty((dataY.shape[1], dataY.shape[2], 2))
     for i in range(dataY.shape[1]): # loop over timesteps
         for j in range(dataY.shape[2]): # loop over features
-            scores[i, j, 0] = math.sqrt(mean_squared_error(dataY[:,i,j], predict[:,i,j]))
-            errors = np.absolute(dataY[:,i,j] - predict[:,i,j])
-            scores[i, j, 1] = np.mean(np.absolute(errors - np.mean(errors, axis=0)), axis=0)
+            ad = np.absolute(dataY[:,i,j] - predict[:,i,j])
+            scores[i, j, 0] = np.mean(ad)
+            scores[i, j, 1] = np.std(ad)
 
     return scores
-    
+
 def evaluate_model_score_compare(dataY, predict):
     '''
         scores are (timestep, feature, [0=mean(squared distance), 1=std(squared distance), 3=mean(absolute distance), 4=std(absolute distance))
@@ -194,8 +207,7 @@ def evaluate_model_score_2(model, dataset):
     predict = dataset.scaler.inverse_transform(predict)
     dataY = dataset.scaler.inverse_transform(dataset.dataY)
  
-    # calculate root mean squared error and
-
+    # calculate root mean squared error
     scores = []
     for i in range(dataY.shape[1]):
         scores.append(math.sqrt(mean_squared_error(dataY[:,i], predict[:,i])))

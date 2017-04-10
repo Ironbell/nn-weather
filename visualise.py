@@ -92,9 +92,9 @@ def display_score(score, extent, file_path):
     plt.xlabel('Years')
     plt.ylabel('Months')
     plt.title('Error comparision over temperature data')
-    plt.savefig(file_path)
-    cb = plt.colorbar()
+    
+    cb = plt.colorbar(fraction=0.046, pad=0.04)
     cb.set_label('Avg RMSE (Kelvin)', rotation=270, labelpad=20)
-    plt.show()
+    plt.savefig(file_path)
     plt.close('all')
 

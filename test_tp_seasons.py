@@ -184,14 +184,15 @@ def evaluate_model(grib_parameters, subfolder_name):
             month_it = month_it + 1
         year_it = year_it + 1
 
-def plot_score():
-    score = np.load('test_tp_seasons/all/score.npy')
-    display_score(score, [1990,2016,1,12], 'test_tp_seasons/all_comparision.png')
+def plot_score(subfolder_name):
+    score = np.load('test_tp_seasons/' + subfolder_name + '/score.npy')
+    display_score(score, [1990,2016,1,12], 'test_tp_seasons/' + subfolder_name + '_comparision.png')
 
 def main():
     #test_model(['temperature', 'pressure'], 'all')
-    evaluate_model(['temperature', 'pressure'], 'all')
-    plot_score()
+    #evaluate_model(['temperature', 'pressure'], 'all')
+    plot_score('summer')
+    plot_score('winter')
     return 1
 
 if __name__ == "__main__":

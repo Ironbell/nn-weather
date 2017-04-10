@@ -702,8 +702,8 @@ class DatasetSquareArea(Dataset):
             dataX[:,:,:,:,i] = self.dataX[:,:,:,:,i] * self.scalers[i, 1] + self.scalers[i, 0]
 
         dataY = np.empty(self.dataY.shape)
-        for i in range(dataY.shape[1]):
-            dataY[:,i] = self.dataY[:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+        for i in range(dataY.shape[2]):
+            dataY[:,:,i] = self.dataY[:,:,i] * self.scalers[i, 1] + self.scalers[i, 0]
       
         return dataX, dataY
   
@@ -719,8 +719,8 @@ class DatasetSquareArea(Dataset):
         
         nb_params = len(self.params.grib_parameters)
        
-        for i in range(predict.shape[1]):
-            predict[:,i] = predict[:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+        for i in range(predict.shape[2]):
+            predict[:,:,i] = predict[:,:,i] * self.scalers[i, 1] + self.scalers[i, 0]
                    
         return predict
         
@@ -732,9 +732,9 @@ class DatasetSquareArea(Dataset):
         """
         predict = np.empty(self.dataY.shape)
         
-        for i in range(predict.shape[1]):
-            predict[:, i] = self.dataX[:, -1, self.params.radius, self.params.radius, i]
-            predict[:, i] = predict[:, i] * self.scalers[i, 1] + self.scalers[i, 0]
+        for i in range(predict.shape[2]):
+            predict[:,:,i] = self.dataX[:, -1, self.params.radius, self.params.radius, i]
+            predict[:,:,i] = predict[:,:,i] * self.scalers[i, 1] + self.scalers[i, 0]
 
         return predict
 
@@ -744,11 +744,12 @@ class DatasetSquareArea(Dataset):
         """
         steps_before = self.params.steps_before
         steps_after = self.params.steps_after
+        forecast_distance = self.params.forecast_distance
       
         dataX, dataY = [], []
-        for i in range(len(dataset) - steps_before - steps_after - 1):
+        for i in range(len(dataset) - steps_before - forecast_distance - steps_after - 1):
             a = dataset[i:(i + steps_before), :, :]
             dataX.append(a)
-            dataY.append(dataset[i + steps_before, self.params.radius, self.params.radius, :])
+            dataY.append(dataset[(i + steps_before + forecast_distance):(i + steps_before + forecast_distance + steps_after), self.params.radius, self.params.radius, :])
         return np.array(dataX), np.array(dataY)
 

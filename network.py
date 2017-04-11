@@ -7,6 +7,7 @@ from keras.models import Sequential
 from keras.layers import Dense, Activation, LSTM, Dropout, TimeDistributed, Flatten, RepeatVector
 from keras.layers.convolutional import Conv2D
 from keras.layers.pooling import MaxPooling2D
+from keras.utils import plot_model
 from sklearn.metrics import mean_squared_error
 
 from dataset import *
@@ -33,9 +34,9 @@ def create_model(model_params, data_params):
     """
     diameter = 1 + 2 * data_params.radius
     nb_features = len(data_params.grib_parameters)
-    
+
     model = Sequential()  
-    model.add(TimeDistributed(Conv2D(filters=model_params.conv_filters, kernel_size=(model_params.conv_filter_size, model_params.conv_filter_size), padding='same', input_shape=(diameter, diameter, nb_features)), input_shape=(data_params.steps_before, diameter, diameter, nb_features)))
+    model.add(TimeDistributed(Conv2D(filters=model_params.conv_filters, kernel_size=model_params.conv_filter_size, padding='same', input_shape=(diameter, diameter, nb_features)), input_shape=(data_params.steps_before, diameter, diameter, nb_features)))
     
     if (diameter > 1):
         model.add(TimeDistributed(MaxPooling2D(pool_size=(2, 2))))
@@ -96,6 +97,8 @@ def train_model(model, dataset, epoch_count, model_folder):
     plt.legend(['train', 'test'], loc='upper right')
     plt.savefig(model_folder + '/history_loss.png')
     plt.cla()
+    
+    plot_model(model, to_file=model_folder + '/model.png')
 
 def predict_multiple(model, dataset, steps_after):
     ''' 

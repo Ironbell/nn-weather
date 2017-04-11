@@ -85,63 +85,134 @@ def test_nb_radius():
     plt.grid(True)
     plt.savefig(subfolder + '/plot.png')
     plt.close('all')
+    
+def short_sanity_test():
+    train_params = get_default_data_params()
+    train_params.years = [2000]
+    train_params.radius =  0
+    train_params.steps_before = 1
+    train_params.grib_parameters = ['temperature']
+    
+    months = list(range(1, 13))
+    
+    for month in months:
+        train_params.months = [month]
+        trainData = DatasetSquareArea(train_params)
+        dataX, dataY = trainData.inverse_transform_data()
+        
+        print('month: ' + str(month))
+        print('average')
+        print(np.mean(dataX) - 273.15)
+        print(np.mean(dataY) - 273.15)
 
-def test_nb_neurons():
+def test_nb_lstm_neurons():
     ''' 
-        trains a network with different number neurons 
+        trains a network with different number lstm neurons 
         compares and visualises the prediction error
     '''
-    train_params = AttrDict()
-    train_params.steps_before = 8
-    train_params.start_lat = 45.839
-    train_params.end_lat = 47.74
-    train_params.start_lon = 186.10
-    train_params.end_lon = 190.52
-    train_params.grib_folder = '/media/isa/VIS1/temperature/'
-    train_params.months = [6,7,8]
-    
-    epoch_count = 20
-    
-    # load data
-    train_params.years = [2000,2001,2002]
-    trainData = DatasetArea(train_params)
-    
-    train_params.years = [2003]
-    testData = DatasetArea(train_params)
+    subfolder = 'test_nb_lstm_neurons'
+    if not os.path.exists(subfolder):
+        os.makedirs(subfolder)
 
-    nb_neurons_list = [ 2, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 ]
+    train_params = get_default_data_params()
+    model_params = get_default_model_params()
 
-    results = np.zeros((len(nb_neurons_list), 2))
+    nb_neurons_list = [1, 2, 4, 8, 16, 32, 64, 128]
+
+    results = np.zeros((len(nb_neurons_list), 3))
     results_it = 0
-
+    
     #train and save the model files
     print ('training started...')
     for nb_neurons in nb_neurons_list:
+        train_params.years = TRAIN_YEARS
+        model_params.lstm_neurons = nb_neurons
        
-        model_file = 'test_nb_neurons/model_neurons_' + str(nb_neurons) + '.h5'
+        trainData = DatasetSquareArea(train_params)
+        model_folder = subfolder + '/model_' + str(nb_neurons) 
         
-        # create and fit the LSTM network
-        print('creating model for neurons: ' + str(nb_neurons))
-        model = create_model(train_params.steps_before, trainData.params.nb_features, nb_neurons)
-        train_model(model, trainData, epoch_count)
-        model.save(model_file)
- 
-        print('testing model for neurons: ' + str(nb_neurons))
-        avg_all = evaluate_model_score(model, testData)
-        results[results_it] = (nb_neurons, avg_all)
+        # create and fit the network
+        print('creating model for lstm neurons: ' + str(nb_neurons))
+        model = create_model(model_params, train_params)
+        train_model(model, trainData, EPOCHS, model_folder)
+       
+        # now evaluate
+        train_params.years = TEST_YEARS
+        testData = DatasetSquareArea(train_params)
+        
+        print('testing model for lstm neurons: ' + str(nb_neurons))
+        score = evaluate_model_score(model, testData)
+        results[results_it] = (nb_neurons, score[0, 0, 0], score[0, 0, 1])
+        
         results_it = results_it + 1
-        np.save('test_nb_neurons/results.npy', results)
+        np.save(subfolder + '/results.npy', results)
        
     # plot
-    plt.plot(results[:,0], results[:,1])
+    plt.errorbar(results[:,0], results[:,1], yerr=results[:,2], fmt='o')
    
-    plt.xlabel('# Neurons')
-    plt.ylabel('RMSE (Kelvin)')
-    plt.title('Number of Neurons')
+    plt.xlabel('LSTM neurons')
+    plt.xticks(results[:,0])
+    plt.ylabel('Error (Kelvin)')
+    plt.title('LSTM neurons/layer')
+    #plt.legend(loc='best')
     plt.grid(True)
-    plt.savefig("test_nb_neurons/plot.png")
-    plt.show()
+    plt.savefig(subfolder + '/plot.png')
+    plt.close('all')
     
+def test_nb_conv_filters():
+    ''' 
+        trains a network with different number conv filters 
+        compares and visualises the prediction error
+    '''
+    subfolder = 'test_nb_lstm_neurons'
+    if not os.path.exists(subfolder):
+        os.makedirs(subfolder)
+
+    train_params = get_default_data_params()
+    model_params = get_default_model_params()
+
+    nb_neurons_list = [1, 2, 4, 8, 16, 32, 64, 128]
+
+    results = np.zeros((len(nb_neurons_list), 3))
+    results_it = 0
+    
+    #train and save the model files
+    print ('training started...')
+    for nb_neurons in nb_neurons_list:
+        train_params.years = TRAIN_YEARS
+        model_params.conv_filters = nb_neurons
+       
+        trainData = DatasetSquareArea(train_params)
+        model_folder = subfolder + '/model_' + str(nb_neurons) 
+        
+        # create and fit the network
+        print('creating model for conv filters: ' + str(nb_neurons))
+        model = create_model(model_params, train_params)
+        train_model(model, trainData, EPOCHS, model_folder)
+       
+        # now evaluate
+        train_params.years = TEST_YEARS
+        testData = DatasetSquareArea(train_params)
+        
+        print('testing model for conv filters: ' + str(nb_neurons))
+        score = evaluate_model_score(model, testData)
+        results[results_it] = (nb_neurons, score[0, 0, 0], score[0, 0, 1])
+        
+        results_it = results_it + 1
+        np.save(subfolder + '/results.npy', results)
+       
+    # plot
+    plt.errorbar(results[:,0], results[:,1], yerr=results[:,2], fmt='o')
+   
+    plt.xlabel('Convolutional filters')
+    plt.xticks(results[:,0])
+    plt.ylabel('Error (Kelvin)')
+    plt.title('Conv filters/layer')
+    #plt.legend(loc='best')
+    plt.grid(True)
+    plt.savefig(subfolder + '/plot.png')
+    plt.close('all')
+
 def test_steps_before():
     ''' 
         trains a network with different window sizes
@@ -445,7 +516,8 @@ def evaluate_forecast_distance():
         plt.savefig("test_forecast_distance_2/plot" + str(i) + ".png")
         
 def main():
-    test_nb_radius()
+    #test_nb_radius()
+    short_sanity_test()
     #test_nb_neurons()
     #test_steps_before()
     #test_network_depth()

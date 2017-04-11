@@ -69,35 +69,36 @@ def plot_uv(images):
         cb.set_label('Wind speed (v component)', rotation=270, labelpad=20)
         plt.close('all')
         image_it = image_it + 1
+        
+def bla(year):
+    images_u = load_data('wind_u', year)
+    images_v = load_data('wind_v', year)
+   
+    print(images_u.shape)
+    print(images_v.shape) # time x 241 (lat) x 480 (lon)
+    
+    resZ = images_u.shape[0]
+    resY = images_u.shape[2]
+    resX = images_u.shape[1]
+    
+    data = np.empty((resZ * resY * resX * 2))
+
+    for z in range(resZ):
+        for y in range(resY):
+            for x in range(resX):
+                index = z * resY * resX + y*resX + x
+                data[2 * index + 0] = images_v[z, x, y]
+                data[2 * index + 1] = images_u[z, x, y]
+
+    print(data.shape)
+    data = data.astype('float32')
+    data.tofile(GRIB_FOLDER + 'uv/' + str(year) + '.bin')
 
 def main():
     print(sys.byteorder)
-    
-    for year in range(1979, 2017):
-        gc.collect()
-        
-        images_u = load_data('wind_u', year)
-        images_v = load_data('wind_v', year)
-       
-        print(images_u.shape)
-        print(images_v.shape) # time x 241 (lat) x 480 (lon)
-        
-        resZ = images_u.shape[0]
-        resY = images_u.shape[2]
-        resX = images_u.shape[1]
-        
-        data = np.empty((resZ * resY * resX * 2))
-        
-        for z in range(resZ):
-            for y in range(resY):
-                for x in range(resX):
-                    index = z * resY * resX + y*resX + x
-                    data[2 * index + 0] = images_v[z, x, y]
-                    data[2 * index + 1] = images_u[z, x, y]
 
-        print(data.shape)
-        data = data.astype('float32')
-        data.tofile(GRIB_FOLDER + 'uv/' + str(year) + '.bin')
+    for year in range(1986, 2017):
+        bla(year)
     return 1
 
 if __name__ == "__main__":

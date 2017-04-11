@@ -1,12 +1,13 @@
 import os, json
 from attrdict import AttrDict
 from keras.models import load_model
+from keras.utils import plot_model
 import numpy as np
 np.random.seed(1337)
 import matplotlib.pyplot as plt
 
 from keras.models import Sequential
-from keras.layers import Dense, Activation, LSTM, Dropout, TimeDistributed, Flatten
+from keras.layers import Dense, Activation, LSTM, Dropout, TimeDistributed, Flatten, RepeatVector
 from keras.layers.convolutional import Conv2D
 from keras.layers.pooling import MaxPooling2D
 from sklearn.metrics import mean_squared_error
@@ -19,6 +20,22 @@ EPOCHS = 100
 GRIB_FOLDER = '/media/isa/VIS1/'
 STEPS_BEFORE = 20
 RADIUS = 2
+
+def get_default_data_params():
+    params = AttrDict()
+    params.steps_before = 20
+    params.steps_after = 1
+    params.grib_folder = GRIB_FOLDER
+    params.forecast_distance = 0
+    params.steps_after = 1
+    params.lat = 47.25
+    params.lon = 8.25
+    params.radius = 2
+    params.grib_parameters = ['temperature', 'pressure']
+    params.months = [6, 7, 8]#[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    params.years = [1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999]
+    params.hours = [0, 6, 12, 18]
+    return params
 
 def create_model(steps_before, radius, nb_features):
     """ 
@@ -33,16 +50,15 @@ def create_model(steps_before, radius, nb_features):
     model = Sequential()
     model.add(TimeDistributed(Conv2D(filters=8, kernel_size=(2,2), padding='same', input_shape=(diameter, diameter, nb_features)), input_shape=(steps_before, diameter, diameter, nb_features)))
     model.add(TimeDistributed(MaxPooling2D(pool_size=(2, 2))))
-    #model.add(TimeDistributed(Dropout(DROPOUT)))
     model.add(TimeDistributed(Flatten()))
     model.add(TimeDistributed(Dense(HIDDEN_NEURONS)))
-    model.add(LSTM(HIDDEN_NEURONS, return_sequences=True))
-    model.add(Dropout(DROPOUT))
-    #model.add(LSTM(HIDDEN_NEURONS, return_sequences=True))
-    #model.add(Dropout(DROPOUT))
     model.add(LSTM(HIDDEN_NEURONS, return_sequences=False))
-    model.add(Dense(nb_features))
-    
+    model.add(Dropout(DROPOUT))
+    model.add(RepeatVector(1))
+    model.add(LSTM(HIDDEN_NEURONS, return_sequences=True))
+    model.add(TimeDistributed(Dense(nb_features)))
+    model.add(TimeDistributed(Activation('linear')))  
+
     model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['accuracy'])  
     return model
 
@@ -86,6 +102,8 @@ def train_model(model, dataset, epoch_count, model_folder):
     plt.savefig(model_folder + '/history_loss.png')
     plt.cla()
 
+    plot_model(model, to_file=model_folder + '/model.png')
+
 def evaluate_model_score_compare(dataY, predict):
     '''
         scores are (timestep, feature, [0=mean(squared distance), 1=std(squared distance), 3=mean(absolute distance), 4=std(absolute distance))
@@ -99,18 +117,18 @@ def evaluate_model_score_compare(dataY, predict):
         #s=std(d)
     '''
     
-    scores = np.empty((dataY.shape[1], 5))
-   
-    for i in range(dataY.shape[1]):
-        scores[i, 4] = math.sqrt(mean_squared_error(dataY[:, i], predict[:, i]))
-        
-        sd = np.square(dataY[:, i] - predict[:, i])
-        scores[i, 0] = np.mean(sd)
-        scores[i, 1] = np.std(sd)
-        
-        ad = np.absolute(dataY[:, i] - predict[:, i])
-        scores[i, 2] = np.mean(ad)
-        scores[i, 3] = np.std(ad)
+    scores = np.empty((dataY.shape[1], dataY.shape[2], 5))
+    for i in range(dataY.shape[1]): # loop over timesteps
+        for j in range(dataY.shape[2]): # loop over features
+            scores[i, j, 4] = math.sqrt(mean_squared_error(dataY[:,i,j], predict[:,i,j]))
+            
+            sd = np.square(dataY[:,i,j] - predict[:,i,j])
+            scores[i, j, 0] = np.mean(sd)
+            scores[i, j, 1] = np.std(sd)
+            
+            ad = np.absolute(dataY[:,i,j] - predict[:,i,j])
+            scores[i, j, 2] = np.mean(ad)
+            scores[i, j, 3] = np.std(ad)
 
     return scores
 
@@ -118,18 +136,7 @@ def test_model(grib_parameters, subfolder_name):
     ''' 
         train the network
     '''
-    train_params = AttrDict()
-    train_params.steps_before = STEPS_BEFORE
-    train_params.forecast_distance = 0
-    train_params.steps_after = 1
-    train_params.lat = 47.25
-    train_params.lon = 189.0
-    train_params.radius = RADIUS
-    train_params.grib_folder = GRIB_FOLDER
-    train_params.grib_parameters = grib_parameters
-    train_params.months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    train_params.years = [1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999]
-    train_params.hours = [0, 6, 12, 18]
+    train_params = get_default_data_params()
 
     # train and save the model files
     print ('training started...')
@@ -145,22 +152,14 @@ def evaluate_model(grib_parameters, subfolder_name):
     ''' 
         evaluation of the model
     '''
-    train_params = AttrDict()
-    train_params.steps_before = STEPS_BEFORE
-    train_params.forecast_distance = 0
-    train_params.steps_after = 1
-    train_params.lat = 47.25
-    train_params.lon = 189.0
-    train_params.radius = RADIUS
-    train_params.grib_folder = GRIB_FOLDER
-    train_params.grib_parameters = grib_parameters
-    train_params.hours = [0, 6, 12, 18]
+    train_params = get_default_data_params()
 
     # evaluate on whole 2000 and save results
     years = list(range(1990, 2017))
     months = [1,2,3,4,5,6,7,8,9,10,11,12]
     
     model = load_model('test_tp_seasons/' + subfolder_name + '/model/model.h5')
+    plot_model(model, to_file='test_tp_seasons/' + subfolder_name + '/model/model.png')
 
     score = np.empty((len(years), len(months)))
     year_it = 0;
@@ -177,7 +176,7 @@ def evaluate_model(grib_parameters, subfolder_name):
 
             avg_score = evaluate_model_score_compare(dataY, predict) 
             np.save('test_tp_seasons/' + subfolder_name + '/' + '/avg_score_' + str(year) + '_' + str(month) + '.npy', avg_score)
-            score[year_it, month_it] = avg_score[0, 4] #RMSE
+            score[year_it, month_it] = avg_score[0, 0, 4] #RMSE
             
             np.save('test_tp_seasons/' + subfolder_name + '/' + '/score.npy', score)
 
@@ -189,10 +188,9 @@ def plot_score(subfolder_name):
     display_score(score, [1990,2016,1,12], 'test_tp_seasons/' + subfolder_name + '_comparision.png')
 
 def main():
-    #test_model(['temperature', 'pressure'], 'all')
-    #evaluate_model(['temperature', 'pressure'], 'all')
+    #test_model(['temperature', 'pressure'], 'summer')
+    evaluate_model(['temperature', 'pressure'], 'summer')
     plot_score('summer')
-    plot_score('winter')
     return 1
 
 if __name__ == "__main__":

@@ -12,124 +12,35 @@ from keras.layers.pooling import MaxPooling2D
 from sklearn.metrics import mean_squared_error
 
 from dataset import *
+from network import *
 
 EPOCHS = 20
 #GRIB_FOLDER = '/home/isa/sftp/'
 GRIB_FOLDER = '/media/isa/VIS1/'
-STEPS_BEFORE = 20
 RADIUS = 2
 
-def create_model(steps_before, radius, nb_features):
-    """ 
-        creates, compiles and returns a RNN model 
-        @param steps_before: the number of previous time steps (input). 
-        @param radius: the radius of the square around the feature of interest
-    """
-    DROPOUT = 0.2
-    HIDDEN_NEURONS = 64
-    diameter = 1 + 2 * radius
-
-    model = Sequential()
-    model.add(TimeDistributed(Conv2D(filters=8, kernel_size=(2,2), padding='same', input_shape=(diameter, diameter, nb_features)), input_shape=(steps_before, diameter, diameter, nb_features)))
-    model.add(TimeDistributed(MaxPooling2D(pool_size=(2, 2))))
-    #model.add(TimeDistributed(Dropout(DROPOUT)))
-    model.add(TimeDistributed(Flatten()))
-    model.add(TimeDistributed(Dense(HIDDEN_NEURONS)))
-    model.add(LSTM(HIDDEN_NEURONS, return_sequences=True))
-    model.add(Dropout(DROPOUT))
-    #model.add(LSTM(HIDDEN_NEURONS, return_sequences=True))
-    #model.add(Dropout(DROPOUT))
-    #model.add(LSTM(HIDDEN_NEURONS, return_sequences=False))
-    model.add(Dense(nb_features))
-    
-    model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['accuracy'])  
-    return model
-
-def train_model(model, dataset, epoch_count, model_folder):
-    """ 
-        trains a model given the dataset to train on
-        @param model: the model to train
-        @param dataset: the dataset to train the model on
-        @param epoch_count: number of epochs to train
-        @param model_folder: the trained model as well as plots for the training history are saved there
-    """
-    history = model.fit(dataset.dataX, dataset.dataY, batch_size=2, epochs=epoch_count, validation_split=0.05)
-    
-    if not os.path.exists(model_folder):
-        os.makedirs(model_folder)
-
-    # save model
-    model.save(model_folder + '/model.h5')
-    # save dataset parameters as json
-    with open(model_folder + '/params.json', 'w') as fp:
-        json.dump(dataset.params, fp)
-
-    # plot training and val loss/accuracy
-    # summarize history for accuracy
-    plt.plot(history.history['acc'])
-    plt.plot(history.history['val_acc'])
-    plt.title('model accuracy')
-    plt.ylabel('accuracy')
-    plt.xlabel('epoch')
-    plt.legend(['train', 'test'], loc='upper left')
-    plt.savefig(model_folder + '/history_acc.png')
-    plt.cla()    
-
-    # summarize history for loss
-    plt.plot(history.history['loss'])
-    plt.plot(history.history['val_loss'])
-    plt.title('model loss')
-    plt.ylabel('loss')
-    plt.xlabel('epoch')
-    plt.legend(['train', 'test'], loc='upper right')
-    plt.savefig(model_folder + '/history_loss.png')
-    plt.cla()
-
-def evaluate_model_score_compare(dataY, predict):
-    '''
-        scores are (timestep, feature, [0=mean(squared distance), 1=std(squared distance), 3=mean(absolute distance), 4=std(absolute distance))
-        
-        #d=(x-y).^2;   % SD   (squared distance)
-        #m=mean(d)     % MSD  (mean squared distance, aka. mean squared error MSE)
-        #s=std(d)
-
-        #d=abs(x-y);   % AD   (absolute distance)
-        #m=mean(d)     % MAD  (mean absolute distance)
-        #s=std(d)
-    '''
-    
-    scores = np.empty((dataY.shape[1], 5))
-   
-    for i in range(dataY.shape[1]):
-        scores[i, 4] = math.sqrt(mean_squared_error(dataY[:, i], predict[:, i]))
-        
-        sd = np.square(dataY[:, i] - predict[:, i])
-        scores[i, 0] = np.mean(sd)
-        scores[i, 1] = np.std(sd)
-        
-        ad = np.absolute(dataY[:, i] - predict[:, i])
-        scores[i, 2] = np.mean(ad)
-        scores[i, 3] = np.std(ad)
-
-    return scores
+def get_default_data_params():
+    params = AttrDict()
+    params.steps_before = 20
+    params.steps_after = 1
+    params.grib_folder = GRIB_FOLDER
+    params.forecast_distance = 0
+    params.steps_after = 1
+    params.lat = 47.25
+    params.lon = 8.25#9 + 180
+    params.radius = RADIUS 
+    params.is_zurich = True
+    params.grib_parameters = ['temperature', 'pressure']
+    params.months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    params.years = [1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999]
+    params.hours = [0, 6, 12, 18]
+    return params
 
 def test_model(grib_parameters, subfolder_name):
     ''' 
         train the network
     '''
-    train_params = AttrDict()
-    train_params.steps_before = STEPS_BEFORE
-    train_params.forecast_distance = 0
-    train_params.steps_after = 1
-    train_params.lat = 47.25
-    train_params.lon = 189.0
-    train_params.radius = RADIUS
-    train_params.grib_folder = GRIB_FOLDER
-    train_params.grib_parameters = grib_parameters
-    train_params.months = [1,2,3,4,5,6,7,8,9,10,11,12]
-    train_params.years = [1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999]
-    train_params.hours = [0, 6, 12, 18]
-
+    train_params = get_default_data_params()
     # train and save the model files
     print ('training started...')
     model_folder = 'test_conv_lstm/' + subfolder_name + '/model'
@@ -137,23 +48,15 @@ def test_model(grib_parameters, subfolder_name):
         
     # create and fit the LSTM network
     print('creating model...')
-    model = create_model(train_params.steps_before, train_params.radius, len(train_params.grib_parameters))
+    model_params = get_default_model_params()
+    model = create_model(model_params, train_params)
     train_model(model, trainData, EPOCHS, model_folder)
     
 def evaluate_constant_baseline(grib_parameters, subfolder_name):
     ''' 
         evaluation of the constant baseline
     '''
-    train_params = AttrDict()
-    train_params.steps_before = STEPS_BEFORE
-    train_params.forecast_distance = 0
-    train_params.steps_after = 1
-    train_params.lat = 47.25
-    train_params.lon = 189.0
-    train_params.radius = RADIUS
-    train_params.grib_folder = GRIB_FOLDER
-    train_params.grib_parameters = grib_parameters
-    train_params.hours = [0, 6, 12, 18]
+    train_params = get_default_data_params()
 
     # evaluate on whole 2000 and save results
     train_params.years = [2000]
@@ -218,16 +121,7 @@ def evaluate_model(grib_parameters, subfolder_name):
     ''' 
         evaluation of the model
     '''
-    train_params = AttrDict()
-    train_params.steps_before = STEPS_BEFORE
-    train_params.forecast_distance = 0
-    train_params.steps_after = 1
-    train_params.lat = 47.25
-    train_params.lon = 189.0
-    train_params.radius = RADIUS
-    train_params.grib_folder = GRIB_FOLDER
-    train_params.grib_parameters = grib_parameters
-    train_params.hours = [0, 6, 12, 18]
+    train_params = get_default_data_params()
 
     # evaluate on whole 2000 and save results
     train_params.years = [2000]
@@ -369,17 +263,16 @@ def compare_2():
     plt.close('all')
  
 def main():
-    #test_model(['temperature'], 'temperature')
-    #evaluate_model(['temperature'], 'temperature')
-    test_model(['temperature', 'pressure'], 'temperature_pressure_16')
-    evaluate_model(['temperature', 'pressure'], 'temperature_pressure_16')
-    #test_model(['temperature', 'pressure', 'wind_u', 'wind_v'], 'temperature_pressure_wind')
-    #evaluate_model(['temperature', 'pressure', 'wind_u', 'wind_v'], 'temperature_pressure_wind')
-    #test_model(['temperature', 'pressure', 'dewpoint_temperature'], 'temperature_pressure_dew')
-    #evaluate_model(['temperature', 'pressure', 'dewpoint_temperature'], 'temperature_pressure_dew')
-    #evaluate_constant_baseline(['temperature'], 'constant_baseline')
-    #plot_comparision()
-    compare_2()
+    test_model(['temperature'], 'temperature')
+    evaluate_model(['temperature'], 'temperature')
+    test_model(['temperature', 'pressure'], 'temperature_pressure')
+    evaluate_model(['temperature', 'pressure'], 'temperature_pressure')
+    test_model(['temperature', 'pressure', 'wind_u', 'wind_v'], 'temperature_pressure_wind')
+    evaluate_model(['temperature', 'pressure', 'wind_u', 'wind_v'], 'temperature_pressure_wind')
+    test_model(['temperature', 'pressure', 'dewpoint_temperature'], 'temperature_pressure_dew')
+    evaluate_model(['temperature', 'pressure', 'dewpoint_temperature'], 'temperature_pressure_dew')
+    evaluate_constant_baseline(['temperature'], 'constant_baseline')
+    plot_comparision()
     return 1
 
 if __name__ == "__main__":

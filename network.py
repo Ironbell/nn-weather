@@ -17,7 +17,7 @@ def get_default_model_params():
         returns the default params for a model.
     '''
     params = AttrDict()
-    params.lstm_layers = 1
+    params.lstm_layers = 2
     params.dropout = 0.2
     params.conv_filters = 8
     params.conv_filter_size = 2
@@ -26,9 +26,42 @@ def get_default_model_params():
     params.activation = 'linear'
     return params
 
+def create_model_multiple(model_params, data_params):
+    """ 
+        creates, compiles and returns a CNN + RNN model with a many to many forecast
+        @param model_params: parameters for the model
+        @param data_params: parameters for the dataset
+    """
+    diameter = 1 + 2 * data_params.radius
+    nb_features = len(data_params.grib_parameters)
+
+    model = Sequential()  
+    model.add(TimeDistributed(Conv2D(filters=model_params.conv_filters, kernel_size=model_params.conv_filter_size, padding='same', input_shape=(diameter, diameter, nb_features)), input_shape=(data_params.steps_before, diameter, diameter, nb_features)))
+    
+    if (diameter > 1):
+        model.add(TimeDistributed(MaxPooling2D(pool_size=(2, 2))))
+  
+    model.add(TimeDistributed(Flatten()))
+    model.add(TimeDistributed(Dense(model_params.dense_neurons)))
+
+    for i in range(model_params.lstm_layers - 1):
+        is_last = (i == model_params.lstm_layers - 2)
+        model.add(LSTM(model_params.lstm_neurons, return_sequences=not is_last))
+        model.add(Dropout(model_params.dropout))
+        
+    model.add(RepeatVector(data_params.steps_after))
+    
+    model.add(LSTM(model_params.lstm_neurons, return_sequences=True))
+
+    model.add(TimeDistributed(Dense(nb_features)))
+    model.add(TimeDistributed(Activation(model_params.activation)))  
+    
+    model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['accuracy'])  
+    return model
+    
 def create_model(model_params, data_params):
     """ 
-        creates, compiles and returns a CNN + RNN model 
+        creates, compiles and returns a CNN + RNN model with a many to one forecast
         @param model_params: parameters for the model
         @param data_params: parameters for the dataset
     """
@@ -45,15 +78,13 @@ def create_model(model_params, data_params):
     model.add(TimeDistributed(Dense(model_params.dense_neurons)))
 
     for i in range(model_params.lstm_layers):
-        model.add(LSTM(model_params.lstm_neurons, return_sequences=(i == model_params.lstm_layers)))
-        model.add(Dropout(model_params.dropout))
+        is_last = (i == model_params.lstm_layers - 1)
+        model.add(LSTM(model_params.lstm_neurons, return_sequences=not is_last))
+        if not is_last:
+            model.add(Dropout(model_params.dropout))
         
-    model.add(RepeatVector(data_params.steps_after))
-    
-    model.add(LSTM(model_params.lstm_neurons, return_sequences=True))
-
-    model.add(TimeDistributed(Dense(nb_features)))
-    model.add(TimeDistributed(Activation(model_params.activation)))  
+    model.add(Dense(nb_features))
+    model.add(Activation(model_params.activation))
     
     model.compile(loss='mean_squared_error', optimizer='rmsprop', metrics=['accuracy'])  
     return model
@@ -160,16 +191,30 @@ def evaluate_model_score_raw(dataY, predict):
         evaluates the model given the dataset and the prediction (both already scaled)
         @param dataY: dataY from the dataset
         @param predict: already predicted data
-        @return mean absolute error, std of absolute error each one per timestep and per feature, shape is (feature, [0=mean, 1=std])
+        @return mean absolute error, std of absolute error each one per timestep and per feature, shape is ([timestep], feature, [0=mean, 1=std])
     """
-    scores = np.empty((dataY.shape[1], dataY.shape[2], 2))
-    for i in range(dataY.shape[1]): # loop over timesteps
-        for j in range(dataY.shape[2]): # loop over features
-            ad = np.absolute(dataY[:,i,j] - predict[:,i,j])
-            scores[i, j, 0] = np.mean(ad)
-            scores[i, j, 1] = np.std(ad)
+    if (len(dataY.shape) == 3):
+    
+        # timesteps are also included
+        scores = np.empty((dataY.shape[1], dataY.shape[2], 2))
+        for i in range(dataY.shape[1]): # loop over timesteps
+            for j in range(dataY.shape[2]): # loop over features
+                ad = np.absolute(dataY[:,i,j] - predict[:,i,j])
+                scores[i, j, 0] = np.mean(ad)
+                scores[i, j, 1] = np.std(ad)
 
-    return scores
+        return scores
+        
+    else:
+        
+        # only features
+        scores = np.empty((dataY.shape[1], 2))
+        for i in range(dataY.shape[1]): # loop over features
+            ad = np.absolute(dataY[:,i] - predict[:,i])
+            scores[i, 0] = np.mean(ad)
+            scores[i, 1] = np.std(ad)
+
+        return scores
 
 def evaluate_model_score_compare(dataY, predict):
     '''
@@ -184,20 +229,40 @@ def evaluate_model_score_compare(dataY, predict):
         #s=std(d)
     '''
     
-    scores = np.empty((dataY.shape[1], dataY.shape[2], 5))
-    for i in range(dataY.shape[1]): # loop over timesteps
-        for j in range(dataY.shape[2]): # loop over features
-            scores[i, j, 4] = math.sqrt(mean_squared_error(dataY[:,i,j], predict[:,i,j]))
-            
-            sd = np.square(dataY[:,i,j] - predict[:,i,j])
-            scores[i, j, 0] = np.mean(sd)
-            scores[i, j, 1] = np.std(sd)
-            
-            ad = np.absolute(dataY[:,i,j] - predict[:,i,j])
-            scores[i, j, 2] = np.mean(ad)
-            scores[i, j, 3] = np.std(ad)
+    if (len(dataY.shape) == 3):
+    
+        # timesteps are also included
+    
+        scores = np.empty((dataY.shape[1], dataY.shape[2], 5))
+        for i in range(dataY.shape[1]): # loop over timesteps
+            for j in range(dataY.shape[2]): # loop over features
+                scores[i, j, 4] = math.sqrt(mean_squared_error(dataY[:,i,j], predict[:,i,j]))
+                
+                sd = np.square(dataY[:,i,j] - predict[:,i,j])
+                scores[i, j, 0] = np.mean(sd)
+                scores[i, j, 1] = np.std(sd)
+                
+                ad = np.absolute(dataY[:,i,j] - predict[:,i,j])
+                scores[i, j, 2] = np.mean(ad)
+                scores[i, j, 3] = np.std(ad)
 
-    return scores
+        return scores
+        
+    else:
+        
+        scores = np.empty((dataY.shape[1], 5))
+        for i in range(dataY.shape[1]): # loop over features
+            scores[i, 4] = math.sqrt(mean_squared_error(dataY[:,i], predict[:,i]))
+            
+            sd = np.square(dataY[:,i] - predict[:,i])
+            scores[i, 0] = np.mean(sd)
+            scores[i, 1] = np.std(sd)
+            
+            ad = np.absolute(dataY[:,i] - predict[:,i])
+            scores[i, 2] = np.mean(ad)
+            scores[i, 3] = np.std(ad)
+
+        return scores
     
 def evaluate_model_score_2(model, dataset):
     """ 

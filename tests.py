@@ -26,6 +26,7 @@ def get_default_data_params():
     params.lat = 47.25
     params.lon = 8.25
     params.radius = RADIUS
+    params.is_zurich = True
     params.grib_parameters = ['temperature', 'pressure']
     params.months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     params.years = TRAIN_YEARS
@@ -42,6 +43,8 @@ def test_nb_radius():
         os.makedirs(subfolder)
 
     train_params = get_default_data_params()
+    train_params.is_zurich = False
+    
     model_params = get_default_model_params()
 
     nb_radius_list = [0, 1, 2, 3, 4]

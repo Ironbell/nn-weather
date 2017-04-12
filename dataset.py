@@ -542,7 +542,6 @@ class DatasetSquareArea(Dataset):
     """
         Loads training/test data of a square area around the center from a grid file, shapes and formats it.
         @param params.steps_before: how many frames before does the network take as input (1 default)
-        @param params.steps_after: how many frames ahead it should predict. (1 default)
         @param params.forecast_distance: how many frames it should skip when predicting (0 default)
         @param params.max_frames: the maximum frames to load
         @param params.grib_folder: the path to the folder holding grib subfolders
@@ -555,6 +554,7 @@ class DatasetSquareArea(Dataset):
         @param params.hours: only load data from those hours
     """
     def __init__(self, params):
+        params.steps_after = 1
         Dataset.__init__(self, params)
         
     def check_params(self, params):
@@ -562,6 +562,9 @@ class DatasetSquareArea(Dataset):
             Checks the parameters for validity
         """
         Dataset.check_params(self, params)
+        
+        if not hasattr(params, 'is_zurich'):
+            params.is_zurich = False
 
         if params.lon > 360 or params.lon < 0:
             raise Exception('longitude must be between 0 and 360')   
@@ -593,8 +596,54 @@ class DatasetSquareArea(Dataset):
         
     def load_frames(self):
         """ 
-            Loads data from the grib file 
+            Loads data from the grib file or directly from the np file
         """
+        if (self.params.is_zurich):
+            self.load_frames_zurich()
+        else:
+            self.load_frames_default()
+    
+    def load_frames_zurich(self):
+        self.frames_data = []
+        self.frames = []
+
+        include_hour = [0 in self.params.hours, 6 in self.params.hours, 12 in self.params.hours, 18 in self.params.hours]
+        nb_params = len(self.params.grib_parameters)
+        diameter = 1 + 2 * self.params.radius
+
+        old_month = -1
+        for year in self.params.years:
+            for month in self.params.months:
+                is_new = (old_month % 12) + 1 != month
+                old_month = month
+                ym_arrays = []
+                gc.collect()
+                
+                for parameter in self.params.grib_parameters:
+                    ym_array = np.load(self.params.grib_folder + parameter + '/zurich/' + str(year) + '/' + str(month) + '.npy')
+                    ym_arrays.append(ym_array)
+
+                for day in range(ym_arrays[0].shape[0]):
+                    for hour in range(ym_arrays[0].shape[1]):
+                        if not include_hour[hour]:
+                            continue
+                        
+                        frame = np.empty((diameter, diameter, nb_params))  
+                        for p in range(nb_params):
+                            frame[:, :, p] = ym_arrays[p][day, hour, :, :]
+                        
+                        self.frames.append(frame)
+                        dataDate = str(year + 1979) + str(month + 1)
+                        dataTime = str(hour * 6)
+                        self.frames_data.append(FrameParameters(dataDate, dataTime, is_new))
+                        is_new = False
+
+        self.frames = np.asarray(self.frames)
+        gc.collect()
+        print ('frames shape:')
+        print (self.frames.shape)           
+        
+    def load_frames_default(self):
         self.frames = []
         self.frames_data = []
         
@@ -691,6 +740,87 @@ class DatasetSquareArea(Dataset):
             self.scalers[i, 1] = ptp_data
             self.frames[:,:,:,i] = array
         
+    def inverse_transform_data(self, flatten=True):
+        """
+            @return unscaled (true) dataX and dataY
+        """     
+        nb_params = len(self.params.grib_parameters)
+        dataX = np.empty(self.dataX.shape)
+
+        for i in range(dataX.shape[4]):
+            dataX[:,:,:,:,i] = self.dataX[:,:,:,:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+
+        dataY = np.empty(self.dataY.shape)
+        for i in range(dataY.shape[1]):
+            dataY[:,i] = self.dataY[:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+      
+        return dataX, dataY
+  
+    def predict_data(self, model, flatten=True):
+        """
+            predicts dataY with the given model
+            using dataX as input and unscales it
+            @param flatten: whether to flatten the reshaped data or leave it seperated per grib parameter
+            @return unscaled prediction of shape (nb_samples, features)
+        """
+        
+        predict = model.predict(self.dataX)
+        
+        nb_params = len(self.params.grib_parameters)
+       
+        for i in range(predict.shape[1]):
+            predict[:,i] = predict[:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+                   
+        return predict
+        
+    def predict_constant(self, flatten=True):
+        """
+            predicts dataY as constant last element from dataX and unscales it
+            @param flatten: whether to flatten the reshaped data or leave it seperated per grib parameter
+            @return unscaled prediction of shape (nb_samples, features)
+        """
+        predict = np.empty(self.dataY.shape)
+        
+        for i in range(predict.shape[2]):
+            predict[:,i] = self.dataX[:, -1, self.params.radius, self.params.radius, i]
+            predict[:,i] = predict[:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+
+        return predict
+
+    def create_dataset(self, dataset):
+        """ 
+            convert an array of values into a dataset matrix 
+        """
+        steps_before = self.params.steps_before
+        steps_after = self.params.steps_after
+        forecast_distance = self.params.forecast_distance
+      
+        dataX, dataY = [], []
+        for i in range(len(dataset) - steps_before - forecast_distance - steps_after):
+            a = dataset[i:(i + steps_before), :, :]
+            dataX.append(a)
+            dataY.append(dataset[(i + steps_before + forecast_distance), self.params.radius, self.params.radius, :])
+        return np.array(dataX), np.array(dataY)
+                
+class DatasetSquareAreaMultiple(DatasetSquareArea):
+    """
+        Loads training/test data of a square area around the center from a grid file, shapes and formats it.
+        @param params.steps_before: how many frames before does the network take as input (1 default)
+        @param params.steps_after: how many frames ahead it should predict. (1 default)
+        @param params.forecast_distance: how many frames it should skip when predicting (0 default)
+        @param params.max_frames: the maximum frames to load
+        @param params.grib_folder: the path to the folder holding grib subfolders
+        @param params.grib_parameters: which parameters to consider, for example ['temperature', 'pressure']
+        @param params.lon: the longitude of the center point
+        @param params.lat: the latitude of the center point
+        @param params.radius: the radius around the center
+        @param params.years: only load data from those years
+        @param params.months: only load data from those months
+        @param params.hours: only load data from those hours
+    """
+    def __init__(self, params):
+        Dataset.__init__(self, params)
+    
     def inverse_transform_data(self, flatten=True):
         """
             @return unscaled (true) dataX and dataY

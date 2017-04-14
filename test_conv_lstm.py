@@ -250,10 +250,10 @@ def compare_2():
 
         # boxplots
         temp_press_error = np.load('test_conv_lstm/' + 'temperature_pressure' + '/month_' + str(month) + '/error.npy')
-        temp_press_error_16 = np.load('test_conv_lstm/' + 'temperature_pressure_16' + '/month_' + str(month) + '/error.npy')
+        temp_press_error_16 = np.load('test_conv_lstm/' + 'better' + '/month_' + str(month) + '/error.npy')
         data = [temp_press_error[:,0], temp_press_error_16[:,0]]
         plt.boxplot(data)
-        plt.xticks([1, 2], ['Temp/Press 8', 'Temp/Press 16'])
+        plt.xticks([1, 2], ['Temp/Press 8', 'Better?'])
         plt.title('Compare temperature forecast models (' + str(month) + '-' + str(year) + ')')
         plt.ylabel('Error (Kelvin)')
         plt.savefig("test_conv_lstm/plots/boxplot_comp_" + str(month) + ".png")
@@ -263,16 +263,18 @@ def compare_2():
     plt.close('all')
  
 def main():
-    test_model(['temperature'], 'temperature')
-    evaluate_model(['temperature'], 'temperature')
-    test_model(['temperature', 'pressure'], 'temperature_pressure')
-    evaluate_model(['temperature', 'pressure'], 'temperature_pressure')
-    test_model(['temperature', 'pressure', 'wind_u', 'wind_v'], 'temperature_pressure_wind')
-    evaluate_model(['temperature', 'pressure', 'wind_u', 'wind_v'], 'temperature_pressure_wind')
-    test_model(['temperature', 'pressure', 'dewpoint_temperature'], 'temperature_pressure_dew')
-    evaluate_model(['temperature', 'pressure', 'dewpoint_temperature'], 'temperature_pressure_dew')
-    evaluate_constant_baseline(['temperature'], 'constant_baseline')
-    plot_comparision()
+    #test_model(['temperature'], 'temperature')
+    #evaluate_model(['temperature'], 'temperature')
+    #test_model(['temperature', 'pressure'], 'temperature_pressure')
+    #evaluate_model(['temperature', 'pressure'], 'temperature_pressure')
+    #test_model(['temperature', 'pressure', 'wind_u', 'wind_v'], 'temperature_pressure_wind')
+    #evaluate_model(['temperature', 'pressure', 'wind_u', 'wind_v'], 'temperature_pressure_wind')
+    #test_model(['temperature', 'pressure', 'dewpoint_temperature'], 'temperature_pressure_dew')
+    #evaluate_model(['temperature', 'pressure', 'dewpoint_temperature'], 'temperature_pressure_dew')
+    #evaluate_constant_baseline(['temperature'], 'constant_baseline')
+    
+    
+    compare_2() 
     return 1
 
 if __name__ == "__main__":

@@ -13,8 +13,8 @@ EPOCHS = 20
 GRIB_FOLDER = '/media/isa/VIS1/'
 STEPS_BEFORE = 20
 RADIUS = 2
-TEST_YEARS = [2016]
-TRAIN_YEARS = [2010, 2011, 2012, 2013, 2014, 2015]
+TEST_YEARS = [2000]
+TRAIN_YEARS = list(range(1990, 2000))
 
 def get_default_data_params():
     params = AttrDict()
@@ -145,7 +145,7 @@ def test_nb_lstm_neurons():
         
         print('testing model for lstm neurons: ' + str(nb_neurons))
         score = evaluate_model_score(model, testData)
-        results[results_it] = (nb_neurons, score[0, 0, 0], score[0, 0, 1])
+        results[results_it] = (nb_neurons, score[0, 0], score[0, 1])
         
         results_it = results_it + 1
         np.save(subfolder + '/results.npy', results)
@@ -199,7 +199,7 @@ def test_nb_conv_filters():
         
         print('testing model for conv filters: ' + str(nb_neurons))
         score = evaluate_model_score(model, testData)
-        results[results_it] = (nb_neurons, score[0, 0, 0], score[0, 0, 1])
+        results[results_it] = (nb_neurons, score[0, 0], score[0, 1])
         
         results_it = results_it + 1
         np.save(subfolder + '/results.npy', results)
@@ -520,8 +520,10 @@ def evaluate_forecast_distance():
         
 def main():
     #test_nb_radius()
-    short_sanity_test()
-    #test_nb_neurons()
+    
+    test_nb_lstm_neurons()
+    #test_nb_conv_filters()
+    
     #test_steps_before()
     #test_network_depth()
     #test_network_activation()

@@ -781,7 +781,7 @@ class DatasetSquareArea(Dataset):
         """
         predict = np.empty(self.dataY.shape)
         
-        for i in range(predict.shape[2]):
+        for i in range(predict.shape[1]):
             predict[:,i] = self.dataX[:, -1, self.params.radius, self.params.radius, i]
             predict[:,i] = predict[:,i] * self.scalers[i, 1] + self.scalers[i, 0]
 

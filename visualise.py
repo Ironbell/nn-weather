@@ -84,7 +84,7 @@ def plot_predictions_images(dataset, predict, folder_name, max_frames):
         plt.close('all')
 
 def display_score(score, extent, file_path):
-    colmap = cm.RdYlGn_r(10)
+    colmap = cm.RdYlBu_r(10)
     score = score.transpose()
     
     plt.imshow(score, cmap=colmap, interpolation='none', extent=extent)

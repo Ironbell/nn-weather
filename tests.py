@@ -12,7 +12,7 @@ EPOCHS = 20
 #GRIB_FOLDER = '/home/isa/sftp/'
 GRIB_FOLDER = '/media/isa/VIS1/'
 STEPS_BEFORE = 20
-RADIUS = 2
+RADIUS = 3
 TEST_YEARS = [2000]
 TRAIN_YEARS = list(range(1990, 2000))
 
@@ -26,7 +26,7 @@ def get_default_data_params():
     params.lat = 47.25
     params.lon = 8.25
     params.radius = RADIUS
-    params.is_zurich = True
+    params.location = 'zurich'
     params.grib_parameters = ['temperature', 'pressure']
     params.months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     params.years = TRAIN_YEARS
@@ -72,7 +72,7 @@ def test_nb_radius():
         
         print('testing model for radius: ' + str(nb_radius))
         score = evaluate_model_score(model, testData)
-        results[results_it] = (nb_radius, score[0, 0, 0], score[0, 0, 1])
+        results[results_it] = (nb_radius, score[0, 0], score[0, 1])
         
         results_it = results_it + 1
         np.save(subfolder + '/results.npy', results)
@@ -90,6 +90,9 @@ def test_nb_radius():
     plt.close('all')
     
 def short_sanity_test():
+    '''
+        to check average temperature values in a file
+    '''
     train_params = get_default_data_params()
     train_params.years = [2000]
     train_params.radius =  0
@@ -167,7 +170,7 @@ def test_nb_conv_filters():
         trains a network with different number conv filters 
         compares and visualises the prediction error
     '''
-    subfolder = 'test_nb_lstm_neurons'
+    subfolder = 'test_nb_conv_filters'
     if not os.path.exists(subfolder):
         os.makedirs(subfolder)
 
@@ -215,6 +218,115 @@ def test_nb_conv_filters():
     plt.grid(True)
     plt.savefig(subfolder + '/plot.png')
     plt.close('all')
+
+def test_nb_conv_layers():
+    ''' 
+        trains a network with different number conv layers 
+        compares and visualises the prediction error
+    '''
+    subfolder = 'test_nb_conv_layers'
+    if not os.path.exists(subfolder):
+        os.makedirs(subfolder)
+
+    train_params = get_default_data_params()
+    model_params = get_default_model_params()
+
+    nb_layers_list = [1, 2, 3]
+
+    results = np.zeros((len(nb_layers_list), 3))
+    results_it = 0
+    
+    #train and save the model files
+    print ('training started...')
+    for nb_layers in nb_layers_list:
+        train_params.years = TRAIN_YEARS
+        model_params.conv_layers = nb_layers
+       
+        trainData = DatasetSquareArea(train_params)
+        model_folder = subfolder + '/model_' + str(nb_layers) 
+        
+        # create and fit the network
+        print('creating model for conv layers: ' + str(nb_layers))
+        model = create_model(model_params, train_params)
+        train_model(model, trainData, EPOCHS, model_folder)
+       
+        # now evaluate
+        train_params.years = TEST_YEARS
+        testData = DatasetSquareArea(train_params)
+        
+        print('testing model for conv layers: ' + str(nb_layers))
+        score = evaluate_model_score(model, testData)
+        results[results_it] = (nb_layers, score[0, 0], score[0, 1])
+        
+        results_it = results_it + 1
+        np.save(subfolder + '/results.npy', results)
+       
+    # plot
+    plt.errorbar(results[:,0], results[:,1], yerr=results[:,2], fmt='o')
+   
+    plt.xlabel('Convolutional layers')
+    plt.xticks(results[:,0])
+    plt.ylabel('Error (Kelvin)')
+    plt.title('Conv layers')
+    #plt.legend(loc='best')
+    plt.grid(True)
+    plt.savefig(subfolder + '/plot.png')
+    plt.close('all')
+
+def test_conv_filter_size():
+    ''' 
+        trains a network with different convolutional filter sizes 
+        compares and visualises the prediction error
+    '''
+    subfolder = 'test_conv_filter_size'
+    if not os.path.exists(subfolder):
+        os.makedirs(subfolder)
+
+    train_params = get_default_data_params()
+    model_params = get_default_model_params()
+
+    filter_size_list = [2, 3, 4]
+
+    results = np.zeros((len(filter_size_list), 3))
+    results_it = 0
+    
+    #train and save the model files
+    print ('training started...')
+    for filter_size in filter_size_list:
+        train_params.years = TRAIN_YEARS
+        model_params.conv_filter_size = filter_size
+       
+        trainData = DatasetSquareArea(train_params)
+        model_folder = subfolder + '/model_' + str(filter_size) 
+        
+        # create and fit the network
+        print('creating model for conv filter size: ' + str(filter_size))
+        model = create_model(model_params, train_params)
+        train_model(model, trainData, EPOCHS, model_folder)
+       
+        # now evaluate
+        train_params.years = TEST_YEARS
+        testData = DatasetSquareArea(train_params)
+        
+        print('testing model for conv filter size: ' + str(filter_size))
+        score = evaluate_model_score(model, testData)
+        results[results_it] = (filter_size, score[0, 0], score[0, 1])
+        
+        results_it = results_it + 1
+        np.save(subfolder + '/results.npy', results)
+       
+    # plot
+    plt.errorbar(results[:,0], results[:,1], yerr=results[:,2], fmt='o')
+   
+    plt.xlabel('Convolutional filter size')
+    plt.xticks(results[:,0])
+    plt.ylabel('Error (Kelvin)')
+    plt.title('Filter size')
+    #plt.legend(loc='best')
+    plt.grid(True)
+    plt.savefig(subfolder + '/plot.png')
+    plt.close('all')
+
 
 def test_steps_before():
     ''' 
@@ -520,10 +632,11 @@ def evaluate_forecast_distance():
         
 def main():
     #test_nb_radius()
+    #test_nb_conv_layers()
+    test_conv_filter_size()
+    test_nb_conv_filters()
     
-    test_nb_lstm_neurons()
-    #test_nb_conv_filters()
-    
+    #test_nb_lstm_neurons()    
     #test_steps_before()
     #test_network_depth()
     #test_network_activation()

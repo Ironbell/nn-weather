@@ -20,7 +20,7 @@ EPOCHS = 100
 #GRIB_FOLDER = '/home/isa/sftp/'
 GRIB_FOLDER = '/media/isa/VIS1/'
 STEPS_BEFORE = 20
-RADIUS = 2
+RADIUS = 3
 
 def get_default_data_params():
     params = AttrDict()

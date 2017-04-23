@@ -51,6 +51,18 @@ class FrameParameters:
         self.date = str(date).zfill(8)
         self.time = str(time).zfill(4)
         self.is_new = is_new
+        
+    def month(self):
+        return self.date[4:6]
+        
+    def year(self):
+        return self.date[0:4]
+        
+    def day(self):
+        return self.date[6:8]
+        
+    def hour(self):
+        return self.time[0:2]
     
 class Dataset:
     """
@@ -209,7 +221,7 @@ class Dataset:
         forecast_distance = self.params.forecast_distance
 
         dataX, dataY = [], []
-        for i in range(len(dataset) - steps_before - forecast_distance - steps_after - 1):
+        for i in range(len(dataset) - steps_before - forecast_distance - steps_after):
             a = dataset[i:(i + steps_before), :]
             dataX.append(a)
             dataY.append(dataset[(i + steps_before + forecast_distance):(i + steps_before + forecast_distance + steps_after), :])
@@ -226,12 +238,14 @@ class Dataset:
         # split into train and test sets
         frame_sets = []
         frames = []
+        
+        fc_offset = self.params.steps_before + self.params.forecast_distance
 
         for index in range(len(self.frames)):
             if (len(frames) > 0 and self.frames_data[index].is_new):
                 frame_sets.append(np.asarray(frames))
                 frames = []
-                self.frames_idx = self.frames_idx[:-self.params.steps_before or None]
+                self.frames_idx = self.frames_idx[fc_offset:]
             
             frames.append(self.frames[index])
             self.frames_idx.append(frames_idx)
@@ -239,6 +253,7 @@ class Dataset:
                 
         if (len(frames) > 0):
             frame_sets.append(np.asarray(frames))
+            self.frames_idx = self.frames_idx[fc_offset:]
             frames = []
         
         self.dataX = np.array([])
@@ -563,8 +578,8 @@ class DatasetSquareArea(Dataset):
         """
         Dataset.check_params(self, params)
         
-        if not hasattr(params, 'is_zurich'):
-            params.is_zurich = False
+        if not hasattr(params, 'location'):
+            params.location = ""
 
         if params.lon > 360 or params.lon < 0:
             raise Exception('longitude must be between 0 and 360')   
@@ -595,15 +610,18 @@ class DatasetSquareArea(Dataset):
         self.params = params
         
     def load_frames(self):
-        """ 
+        ''' 
             Loads data from the grib file or directly from the np file
-        """
-        if (self.params.is_zurich):
-            self.load_frames_zurich()
+        '''
+        if (self.params.location != ""):
+            self.load_frames_location()
         else:
             self.load_frames_default()
     
-    def load_frames_zurich(self):
+    def load_frames_location(self):
+        '''
+            Loads frames from a specific pre-loaded location, like zurich.
+        '''
         self.frames_data = []
         self.frames = []
 
@@ -620,7 +638,7 @@ class DatasetSquareArea(Dataset):
                 gc.collect()
                 
                 for parameter in self.params.grib_parameters:
-                    ym_array = np.load(self.params.grib_folder + parameter + '/zurich/' + str(year) + '/' + str(month) + '.npy')
+                    ym_array = np.load(self.params.grib_folder + parameter + '/' + self.params.location + '/' + str(year) + '/' + str(month) + '.npy')
                     ym_arrays.append(ym_array)
 
                 for day in range(ym_arrays[0].shape[0]):
@@ -633,8 +651,8 @@ class DatasetSquareArea(Dataset):
                             frame[:, :, p] = ym_arrays[p][day, hour, :, :]
                         
                         self.frames.append(frame)
-                        dataDate = str(year + 1979) + str(month + 1)
-                        dataTime = str(hour * 6)
+                        dataDate = str(year).zfill(4) + str(month).zfill(2) + str(day + 1).zfill(2) 
+                        dataTime = str(hour * 6).zfill(2) + '00'
                         self.frames_data.append(FrameParameters(dataDate, dataTime, is_new))
                         is_new = False
 
@@ -792,11 +810,10 @@ class DatasetSquareArea(Dataset):
             convert an array of values into a dataset matrix 
         """
         steps_before = self.params.steps_before
-        steps_after = self.params.steps_after
         forecast_distance = self.params.forecast_distance
       
         dataX, dataY = [], []
-        for i in range(len(dataset) - steps_before - forecast_distance - steps_after):
+        for i in range(len(dataset) - steps_before - forecast_distance):
             a = dataset[i:(i + steps_before), :, :]
             dataX.append(a)
             dataY.append(dataset[(i + steps_before + forecast_distance), self.params.radius, self.params.radius, :])

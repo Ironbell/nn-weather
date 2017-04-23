@@ -21,6 +21,7 @@ def get_default_model_params():
     params.dropout = 0.2
     params.conv_filters = 8
     params.conv_filter_size = 2
+    params.conv_layers = 1
     params.lstm_neurons = 64
     params.dense_neurons = 64
     params.activation = 'linear'
@@ -69,11 +70,17 @@ def create_model(model_params, data_params):
     nb_features = len(data_params.grib_parameters)
 
     model = Sequential()  
+
     model.add(TimeDistributed(Conv2D(filters=model_params.conv_filters, kernel_size=model_params.conv_filter_size, padding='same', input_shape=(diameter, diameter, nb_features)), input_shape=(data_params.steps_before, diameter, diameter, nb_features)))
-    
-    if (diameter > 1):
+    print(model.layers[-1].output_shape)
+    if (model.layers[-1].output_shape[-2] > 1):
         model.add(TimeDistributed(MaxPooling2D(pool_size=(2, 2))))
-  
+
+    for _ in range(model_params.conv_layers - 1):
+        model.add(TimeDistributed(Conv2D(filters=model_params.conv_filters, kernel_size=model_params.conv_filter_size, padding='same')))
+        if (model.layers[-1].output_shape[-2] > 1):
+            model.add(TimeDistributed(MaxPooling2D(pool_size=(2, 2))))  
+    
     model.add(TimeDistributed(Flatten()))
     model.add(TimeDistributed(Dense(model_params.dense_neurons)))
 
@@ -232,7 +239,6 @@ def evaluate_model_score_compare(dataY, predict):
     if (len(dataY.shape) == 3):
     
         # timesteps are also included
-    
         scores = np.empty((dataY.shape[1], dataY.shape[2], 5))
         for i in range(dataY.shape[1]): # loop over timesteps
             for j in range(dataY.shape[2]): # loop over features

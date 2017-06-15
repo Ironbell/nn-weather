@@ -18,7 +18,9 @@ def drange(x, y, jump):
     yield float(x_)
     x_ += decimal.Decimal(jump)
 
-def save_location(grib_parameter, loc='zurich', latitude=47.25, longitude=8.25):
+# loc='zurich', latitude=47.25, longitude=8.25
+   
+def save_location(grib_parameter, loc='paris', latitude=48.75, longitude=2.25):
     """ 
         Loads data from the grib file and saves it for further faster use
     """
@@ -108,7 +110,7 @@ def save_location(grib_parameter, loc='zurich', latitude=47.25, longitude=8.25):
        
         f.close()
 
-def save_location_uv(grib_parameter='u_ambient', binary_file='uv_ambient', binary_file_2='.bin_ambient20.bin', uv_param='u', loc='zurich', latitude=47.25, longitude=8.25):
+def save_location_uv(grib_parameter='u_ambient', binary_file='uv_ambient', binary_file_2='.bin_ambient20.bin', uv_param='u', loc='paris', latitude=48.75, longitude=2.25):
     """ 
         Loads data from the binary files and saves it for further faster use
     """
@@ -173,12 +175,16 @@ def save_location_uv(grib_parameter='u_ambient', binary_file='uv_ambient', binar
             np.save(year_folder + '/' + str(month) + '.npy', current_month)
 
 def main():
-    #save_location('temperature')
-    save_location('cloud_cover') 
-    #save_location_uv('u_ambient', 'uv_ambient', '.bin_ambient20.bin', 'u')
-    #save_location_uv('v_ambient', 'uv_ambient', '.bin_ambient20.bin', 'v')
-    #save_location_uv('u_features', 'uv_features', '.bin_features20.bin', 'u')
-    #save_location_uv('v_features', 'uv_features', '.bin_features20.bin', 'v')
+    save_location('temperature')
+    save_location('wind_u')
+    save_location('wind_v') 
+    save_location('surface_pressure')
+    save_location('pressure') 
+    save_location('cloud_cover')
+    save_location_uv('u_ambient', 'uv_ambient', '.bin_ambient20.bin', 'u')
+    save_location_uv('v_ambient', 'uv_ambient', '.bin_ambient20.bin', 'v')
+    save_location_uv('u_features', 'uv_features', '.bin_features20.bin', 'u')
+    save_location_uv('v_features', 'uv_features', '.bin_features20.bin', 'v')
     
     return 1
 

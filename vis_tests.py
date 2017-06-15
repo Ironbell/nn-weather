@@ -9,6 +9,8 @@ from dataset import *
 from network import *
 from visualise import *
 
+import time
+
 EPOCHS = 100
 GRIB_FOLDER = '/media/isa/VIS1/'
 RADIUS = 3
@@ -21,10 +23,10 @@ def get_default_data_params():
     params.grib_folder = GRIB_FOLDER
     params.forecast_distance = 0
     params.steps_after = 1
-    params.lat = 47.25
-    params.lon = 8.25
+    params.lat = 48.75
+    params.lon = 2.25
     params.radius = RADIUS
-    params.location = 'zurich'
+    params.location = 'paris'
     params.grib_parameters = ['temperature', 'pressure']
     params.months = list(range(1, 12 + 1))
     params.years = list(range(1990, 2000))
@@ -52,16 +54,19 @@ def get_parameter_short(grib_parameters):
             string = string + 'Fu'
         if (parameter == 'v_features'):
             string = string + 'Fv'
+        if (parameter == 'cloud_cover'):
+            string = string + 'Cloud'
 
     return string
 
-def get_folder_name(lstm_neurons=64, train_months='All', grib_parameters=['temperature'], forecast_distance=0, steps_before=20):
+def get_folder_name(lstm_neurons=64, train_months='All', grib_parameters=['temperature'], forecast_distance=0, steps_before=20, lstm_layers=2):
     return \
         'n' + str(lstm_neurons) + '_' + \
         'p' + get_parameter_short(grib_parameters) + '_'  + \
         'm' + train_months.title() + '_' + \
         'f' + str(forecast_distance) + '_' + \
-        's' + str(steps_before)
+        's' + str(steps_before) + '_' + \
+        'l' + str(lstm_layers)
 
 def get_train_months(months):
     if (months == 'Summer'):
@@ -74,19 +79,22 @@ def get_train_months(months):
         return [3, 4, 5]
     return list(range(1, 13))
 
-def run_test(lstm_neurons=64, train_months='all', grib_parameters=['temperature'], forecast_distance=0, steps_before=20):
+def run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature'], forecast_distance=0, steps_before=20, lstm_layers=2):
     ''' 
         runs a test for the visualisation model.
     '''
-    folder_name = get_folder_name(lstm_neurons, train_months, grib_parameters, forecast_distance, steps_before)
-    subfolder = GRIB_FOLDER + 'data/' + folder_name
+    folder_name = get_folder_name(lstm_neurons, train_months, grib_parameters, forecast_distance, steps_before, lstm_layers)
+    subfolder = GRIB_FOLDER + 'data/paris/' + folder_name
     if not os.path.exists(subfolder):
         os.makedirs(subfolder)
+        
+    timer = np.empty((3))
 
     train_params = get_default_data_params()
     model_params = get_default_model_params()
 
     model_params.lstm_neurons = lstm_neurons
+    model_params.lstm_layers = lstm_layers
     train_params.months = get_train_months(train_months)
     train_params.grib_parameters = grib_parameters
     train_params.forecast_distance = forecast_distance
@@ -94,15 +102,23 @@ def run_test(lstm_neurons=64, train_months='all', grib_parameters=['temperature'
     
     print ('test started: ' + folder_name)
     
+    old_time = time.time()
+    
     #train and save the model files
     print ('loading data for training...')
     trainData = DatasetSquareArea(train_params)
     model_folder = subfolder + '/model'
+    
+    timer[0] = time.time() - old_time
+    old_time = time.time()
 
     # create and fit the network
     print('creating model')
     model = create_model(model_params, train_params)
     train_model(model, trainData, EPOCHS, model_folder)
+    
+    timer[1] = time.time() - old_time
+    old_time = time.time()
     
     #model = load_model(subfolder + '/model/model.h5')
    
@@ -138,6 +154,8 @@ def run_test(lstm_neurons=64, train_months='all', grib_parameters=['temperature'
         
         if (current_month != frame_data.month()):
             if (len(month_data) > 0):
+                if (len(month_data) % 4 > 0):
+                    month_data = ([np.zeros((dataY.shape[1]))] * (4 - (len(month_data) % 4))) + month_data
                 np.save(y_subfolder + '/' + str(current_month) + '_error.npy', np.asarray(month_data).reshape((-1, 4, channels)))
                 year_overview[year_it, month_it, :] = np.mean(np.asarray(month_data), axis=0)
                 month_data = []
@@ -159,14 +177,24 @@ def run_test(lstm_neurons=64, train_months='all', grib_parameters=['temperature'
         month_data.append(error)
         
     if (len(month_data) > 0):
+        if (len(month_data) % 4 > 0):
+            month_data = ([np.zeros((dataY.shape[1]))] * (4 - (len(month_data) % 4))) + month_data       
         np.save(y_subfolder + '/' + str(current_month) + '_error.npy', np.asarray(month_data).reshape((-1, 4, channels)))
         year_overview[year_it, month_it, :] = np.mean(np.asarray(month_data), axis=0)
         
+    timer[2] = time.time() - old_time
+     
     np.save(subfolder + '/year_overview.npy', year_overview)
             
     for channel in range(channels):
-        display_score(year_overview[:,:,channel], [1990,2016,12,1], subfolder + '/' + str(channel) + '_season_comparision.png')
-            
+        display_score(year_overview[:,:,channel], [1990,2016,12,1], subfolder + '/' + str(channel) + '_season_comparision.png',  train_params.grib_parameters[channel])
+        
+    print('loading data took: ' + str(timer[0]) + 's')
+    print('training the model took: ' + str(timer[1]) + 's')
+    print('evaluating the model took: ' + str(timer[2]) + 's')     
+    
+    np.save(subfolder + '/timer.npy', timer)
+    np.save(subfolder + '/score.npy', np.mean(year_overview.reshape((-1, channels)), axis=0))
 
 def season_plot(lstm_neurons=64, train_months='all', grib_parameters=['temperature'], forecast_distance=0, steps_before=20):
     folder_name = get_folder_name(lstm_neurons, train_months, grib_parameters, forecast_distance, steps_before)
@@ -211,9 +239,43 @@ def season_plot(lstm_neurons=64, train_months='all', grib_parameters=['temperatu
         
     display_score(score, [1990,2016,12,1], subfolder + '/season_comparision.png')
 
-def main():
-    run_test(lstm_neurons=32, train_months='Summer', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
-    #season_plot(lstm_neurons=64, train_months='Summer', grib_parameters=['temperature', 'pressure'], forecast_distance=0, steps_before=20)
+def main(): 
+    run_test(lstm_neurons=64, train_months='Summer', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    
+    run_test(lstm_neurons=64, train_months='Winter', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'cloud_cover'], forecast_distance=0, steps_before=20)
+    
+    run_test(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    
+    run_test(lstm_neurons=32, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=1, steps_before=20)
+    
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=4, steps_before=20)
+    
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=30)
+
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=10)
+    
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'wind_u', 'wind_v'], forecast_distance=0, steps_before=20)
+    
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'u_ambient', 'v_ambient'], forecast_distance=0, steps_before=20)
+    
+    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'u_features', 'v_features'], forecast_distance=0, steps_before=20)
+    
+    #run_test(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'u_features', 'v_features', 'u_ambient', 'v_ambient'], forecast_distance=0, steps_before=20)
+    
+    run_test(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'surface_pressure', 'cloud_cover'], forecast_distance=0, steps_before=20)
+    
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature'], forecast_distance=0, steps_before=20)
+    
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20, lstm_layers=4) 
+    
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure', 'cloud_cover'], forecast_distance=0, steps_before=20)
+
     return 1
 
 if __name__ == "__main__":

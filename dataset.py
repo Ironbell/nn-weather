@@ -21,7 +21,33 @@ def drange(x, y, jump):
     
 def round_nearest(x, a):
     return round(x / a) * a
-
+    
+def calculateLatGridRange(start, end):
+    list = []
+    current = start;
+    while (True):
+        list.append(current)
+        if (current == end): 
+            break
+        current = current + GRID_SIZE
+        if (current > 90):
+            current = -90
+            
+    return list
+    
+def calculateLonGridRange(start, end):
+    list = []
+    current = start;
+    while (True):
+        list.append(current)
+        if (current == end): 
+            break
+        current = current + GRID_SIZE
+        if (current > 359.25):
+            current = 0
+            
+    return list
+    
 def crop_center(img, width, height):
     """
         returns the center of the image
@@ -595,10 +621,20 @@ class DatasetSquareArea(Dataset):
         
         scaled_radius = params.radius * GRID_SIZE
         
-        params.start_lat = params.lat - scaled_radius
+        params.start_lat = params.lat - scaled_radius 
         params.end_lat = params.lat + scaled_radius
         params.start_lon = params.lon - scaled_radius
         params.end_lon = params.lon + scaled_radius
+        
+        # wrap around
+        if (params.start_lat < -90):
+            params.start_lat = params.start_lat + 180
+        if (params.end_lat > 90):
+            params.end_lat = params.end_lat - 180
+        if (params.start_lon < 0):
+            params.start_lon = params.start_lon + 360
+        if (params.end_lon > 359.25):
+            params.end_lon = params.end_lon - 360
 
         params.nb_grib_points = (1 + 2 * params.radius) * (1 + 2 * params.radius)
         params.nb_features = params.nb_grib_points * len(params.grib_parameters)
@@ -705,10 +741,13 @@ class DatasetSquareArea(Dataset):
                     bottomLeft = codes_grib_find_nearest(gid, self.params.start_lat, self.params.start_lon)[0]
                     topRight = codes_grib_find_nearest(gid, self.params.end_lat, self.params.end_lon)[0]
                     
+                    latRange = reversed(calculateLatGridRange(bottomLeft.lat, topRight.lat))
+                    lonRange = reversed(calculateLonGridRange(bottomLeft.lon, topRight.lon))
+
                     latIt = 0
-                    for lat in reversed(list(drange(bottomLeft.lat, topRight.lat + GRID_SIZE, GRID_SIZE))):
+                    for lat in latRange:
                         lonIt = 0
-                        for lon in drange(bottomLeft.lon, topRight.lon + GRID_SIZE, GRID_SIZE):
+                        for lon in lonRange:
                             nearest = codes_grib_find_nearest(gid, lat, lon)[0]
                             frame[latIt, lonIt, gidIt] = max(0, nearest.value)
                             if nearest.value == missingVal:
@@ -899,4 +938,218 @@ class DatasetSquareAreaMultiple(DatasetSquareArea):
             dataX.append(a)
             dataY.append(dataset[(i + steps_before + forecast_distance):(i + steps_before + forecast_distance + steps_after), self.params.radius, self.params.radius, :])
         return np.array(dataX), np.array(dataY)
+        
+class DatasetSquareAreaCached(Dataset):
+    """
+        Loads training/test data of a square area around the center from a grid file, shapes and formats it.
+        @param params.steps_before: how many frames before does the network take as input (1 default)
+        @param params.forecast_distance: how many frames it should skip when predicting (0 default)
+        @param params.max_frames: the maximum frames to load
+        @param params.grib_folder: the path to the folder holding grib subfolders
+        @param params.grib_parameters: which parameters to consider, for example ['temperature', 'pressure']
+        @param params.lon: the longitude of the center point
+        @param params.lat: the latitude of the center point
+        @param params.radius: the radius around the center
+        @param params.years: only load data from those years
+        @param params.months: only load data from those months
+        @param params.hours: only load data from those hours
+    """
+    def __init__(self, params, cached_data):
+        params.steps_after = 1
+        self.cached_data = cached_data
+        Dataset.__init__(self, params)
+        
+    def check_params(self, params):
+        """ 
+            Checks the parameters for validity
+        """
+        Dataset.check_params(self, params)
+
+        if params.lon > 360 or params.lon < 0:
+            raise Exception('longitude must be between 0 and 360')   
+
+        if params.lat > 90 or params.lat < -90:
+            raise Exception('latitude must be between -90 and 90')   
+
+        if params.radius < 0 or params.radius > 10:
+            raise Exception('radius has to be between 0 and 10') 
+
+        params.lat = round_nearest(params.lat, GRID_SIZE)
+        params.lon = round_nearest(params.lon, GRID_SIZE)
+        
+        scaled_radius = params.radius * GRID_SIZE
+        
+        params.start_lat = params.lat - scaled_radius 
+        params.end_lat = params.lat + scaled_radius
+        params.start_lon = params.lon - scaled_radius
+        params.end_lon = params.lon + scaled_radius
+        
+        # wrap around
+        if (params.start_lat < -90):
+            params.start_lat = params.start_lat + 180
+        if (params.end_lat > 90):
+            params.end_lat = params.end_lat - 180
+        if (params.start_lon < 0):
+            params.start_lon = params.start_lon + 360
+        if (params.end_lon > 359.25):
+            params.end_lon = params.end_lon - 360
+
+        params.nb_grib_points = (1 + 2 * params.radius) * (1 + 2 * params.radius)
+        params.nb_features = params.nb_grib_points * len(params.grib_parameters)
+
+        print ('nb features is %i' % params.nb_features)
+        print ('nb grib points is %i' % params.nb_grib_points)
+        print ('parameters are: ')
+        print (params.grib_parameters)
+        self.params = params
+        
+    def load_frames(self):
+        ''' 
+            Loads data from the cached_data
+        '''
+        self.frames = []
+        self.frames_data = []
+        
+        diameter = 1 + 2 * self.params.radius
+        latRange = reversed(calculateLatGridRange(self.params.start_lat, self.params.end_lat))
+        lonRange = reversed(calculateLonGridRange(self.params.start_lon, self.params.end_lon))
+        
+        for timeIt in range(self.cached_data[0].shape[0]):
+            paramIt = 0
+            for parameter in self.params.grib_parameters:
+
+                frame = np.empty((diameter, diameter, len(self.params.grib_parameters)))  
+
+                latIt = 0
+                for lat in latRange:
+                    lonIt = 0
+                    for lon in lonRange:
+                        latIdx, lonIdx = lonlat_to_idx(lon, lat)
+                        frame[latIt, lonIt, paramIt] = self.cached_data[paramIt][timeIt, latIdx, lonIdx]
+                       
+                        lonIt = lonIt + 1
+                        
+                    latIt = latIt + 1
+                        
+                paramIt = paramIt + 1
+            
+            self.frames.append(frame)
+       
+        print ('')
+        self.frames = np.asarray(self.frames)
+        gc.collect()
+        print ('frames shape:')
+        print (self.frames.shape)       
+
+    def normalize_frames(self):
+        """ 
+            Normalizes and reshapes loaded frames 
+        """
+        self.frames = self.frames.astype('float32')
+
+        nb_params = len(self.params.grib_parameters)
+        self.scalers = np.empty((nb_params, 2))
+        
+        # we normalize per grib  parameter
+        for i in range(nb_params):
+            array = self.frames[:,:,:,i]
+            min_data, ptp_data = array.min(), array.ptp()
+            array = (array - min_data) / ptp_data
+            self.scalers[i, 0] = min_data
+            self.scalers[i, 1] = ptp_data
+            self.frames[:,:,:,i] = array
+        
+    def inverse_transform_data(self, flatten=True):
+        """
+            @return unscaled (true) dataX and dataY
+        """     
+        nb_params = len(self.params.grib_parameters)
+        dataX = np.empty(self.dataX.shape)
+
+        for i in range(dataX.shape[4]):
+            dataX[:,:,:,:,i] = self.dataX[:,:,:,:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+
+        dataY = np.empty(self.dataY.shape)
+        for i in range(dataY.shape[1]):
+            dataY[:,i] = self.dataY[:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+      
+        return dataX, dataY
+  
+    def predict_data(self, model, flatten=True):
+        """
+            predicts dataY with the given model
+            using dataX as input and unscales it
+            @param flatten: whether to flatten the reshaped data or leave it seperated per grib parameter
+            @return unscaled prediction of shape (nb_samples, features)
+        """
+        
+        predict = model.predict(self.dataX)
+        
+        nb_params = len(self.params.grib_parameters)
+       
+        for i in range(predict.shape[1]):
+            predict[:,i] = predict[:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+                   
+        return predict
+        
+    def predict_constant(self, flatten=True):
+        """
+            predicts dataY as constant last element from dataX and unscales it
+            @param flatten: whether to flatten the reshaped data or leave it seperated per grib parameter
+            @return unscaled prediction of shape (nb_samples, features)
+        """
+        predict = np.empty(self.dataY.shape)
+        
+        for i in range(predict.shape[1]):
+            predict[:,i] = self.dataX[:, -1, self.params.radius, self.params.radius, i]
+            predict[:,i] = predict[:,i] * self.scalers[i, 1] + self.scalers[i, 0]
+
+        return predict
+
+    def create_dataset(self, dataset):
+        """ 
+            convert an array of values into a dataset matrix 
+        """
+        steps_before = self.params.steps_before
+        forecast_distance = self.params.forecast_distance
+      
+        dataX, dataY = [], []
+        for i in range(len(dataset) - steps_before - forecast_distance):
+            a = dataset[i:(i + steps_before), :, :]
+            dataX.append(a)
+            dataY.append(dataset[(i + steps_before + forecast_distance), self.params.radius, self.params.radius, :])
+        return np.array(dataX), np.array(dataY)
+        
+    def create_samples(self):
+        """ 
+            split data into x and y parts and shapes them. 
+        """
+
+        # split into train and test sets
+        frame_sets = []
+        frames = []
+        
+        fc_offset = self.params.steps_before + self.params.forecast_distance
+
+        for index in range(len(self.frames)):
+            frames.append(self.frames[index])
+                
+        if (len(frames) > 0):
+            frame_sets.append(np.asarray(frames))
+            frames = []
+        
+        self.dataX = np.array([])
+        self.dataY = np.array([])
+
+        for frame_set in frame_sets:
+            dX, dY = self.create_dataset(frame_set)
+            self.dataX = np.concatenate((self.dataX, dX), 0) if self.dataX.size else dX
+            self.dataY = np.concatenate((self.dataY, dY), 0) if self.dataY.size else dY
+      
+        print ("shape of data X is:")
+        print (self.dataX.shape)
+        print ("shape of data Y is:")
+        print (self.dataY.shape)
+
+
 

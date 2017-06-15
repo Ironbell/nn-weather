@@ -122,7 +122,7 @@ def train_model(model, dataset, epoch_count, model_folder):
     plt.title('model accuracy')
     plt.ylabel('accuracy')
     plt.xlabel('epoch')
-    plt.legend(['train', 'test'], loc='upper left')
+    plt.legend(['train', 'evaluation'], loc='upper left')
     plt.savefig(model_folder + '/history_acc.png')
     plt.cla()    
 
@@ -132,7 +132,7 @@ def train_model(model, dataset, epoch_count, model_folder):
     plt.title('model loss')
     plt.ylabel('loss')
     plt.xlabel('epoch')
-    plt.legend(['train', 'test'], loc='upper right')
+    plt.legend(['train', 'evaluation'], loc='upper right')
     plt.savefig(model_folder + '/history_loss.png')
     plt.cla()
     

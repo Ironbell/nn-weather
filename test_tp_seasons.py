@@ -31,9 +31,9 @@ def get_default_data_params():
     params.steps_after = 1
     params.lat = 47.25
     params.lon = 8.25
-    params.radius = 2
-    params.is_zurich = True
-    params.grib_parameters = ['temperature', 'pressure']
+    params.radius = RADIUS
+    params.location = 'zurich'
+    params.grib_parameters = ['temperature', 'surface_pressure']
     params.months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     params.years = [1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999]
     params.hours = [0, 6, 12, 18]
@@ -93,12 +93,12 @@ def evaluate_model(grib_parameters, subfolder_name):
 
 def plot_score(subfolder_name):
     score = np.load('test_tp_seasons/' + subfolder_name + '/score.npy')
-    display_score(score, [1990,2016,12,1], 'test_tp_seasons/' + subfolder_name + '_comparision.png')
+    display_score(score, [1990,2016,12,1], 'test_tp_seasons/' + subfolder_name + '_comparision.png', 'temperature')
 
 def main():
-    test_model(['temperature', 'pressure'], 'all')
-    evaluate_model(['temperature', 'pressure'], 'all')
-    plot_score('all')
+    test_model(['temperature', 'surface_pressure'], 'summer')
+    evaluate_model(['temperature', 'surface_pressure'], 'summer')
+    plot_score('summer')
     return 1
 
 if __name__ == "__main__":

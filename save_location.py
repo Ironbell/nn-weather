@@ -19,8 +19,9 @@ def drange(x, y, jump):
     x_ += decimal.Decimal(jump)
 
 # loc='zurich', latitude=47.25, longitude=8.25
+# loc='paris', latitude=48.75, longitude=2.25
    
-def save_location(grib_parameter, loc='paris', latitude=48.75, longitude=2.25):
+def save_location(grib_parameter, loc='los_angeles', latitude=33.75, longitude=241.5):
     """ 
         Loads data from the grib file and saves it for further faster use
     """
@@ -110,7 +111,7 @@ def save_location(grib_parameter, loc='paris', latitude=48.75, longitude=2.25):
        
         f.close()
 
-def save_location_uv(grib_parameter='u_ambient', binary_file='uv_ambient', binary_file_2='.bin_ambient20.bin', uv_param='u', loc='paris', latitude=48.75, longitude=2.25):
+def save_location_uv(grib_parameter='u_ambient', binary_file='uv_ambient', binary_file_2='.bin_ambient20.bin', uv_param='u', loc='los_angeles', latitude=33.75, longitude=241.5):
     """ 
         Loads data from the binary files and saves it for further faster use
     """

@@ -23,6 +23,7 @@ def round_nearest(x, a):
     return round(x / a) * a
     
 def calculateLatGridRange(start, end):
+    print('end lat is: ' + str(end))
     list = []
     current = start;
     while (True):
@@ -30,7 +31,7 @@ def calculateLatGridRange(start, end):
         if (current == end): 
             break
         current = current + GRID_SIZE
-        if (current > 90):
+        if (current > 89.25):
             current = -90
             
     return list
@@ -965,11 +966,11 @@ class DatasetSquareAreaCached(Dataset):
         """
         Dataset.check_params(self, params)
 
-        if params.lon > 360 or params.lon < 0:
-            raise Exception('longitude must be between 0 and 360')   
+        if params.lon > 359.25 or params.lon < 0:
+            raise Exception('longitude must be between 0 and 359.25')   
 
-        if params.lat > 90 or params.lat < -90:
-            raise Exception('latitude must be between -90 and 90')   
+        if params.lat > 89.25 or params.lat < -90:
+            raise Exception('latitude must be between -90 and 89.25')   
 
         if params.radius < 0 or params.radius > 10:
             raise Exception('radius has to be between 0 and 10') 
@@ -987,7 +988,7 @@ class DatasetSquareAreaCached(Dataset):
         # wrap around
         if (params.start_lat < -90):
             params.start_lat = params.start_lat + 180
-        if (params.end_lat > 90):
+        if (params.end_lat > 89.25):
             params.end_lat = params.end_lat - 180
         if (params.start_lon < 0):
             params.start_lon = params.start_lon + 360
@@ -997,10 +998,6 @@ class DatasetSquareAreaCached(Dataset):
         params.nb_grib_points = (1 + 2 * params.radius) * (1 + 2 * params.radius)
         params.nb_features = params.nb_grib_points * len(params.grib_parameters)
 
-        print ('nb features is %i' % params.nb_features)
-        print ('nb grib points is %i' % params.nb_grib_points)
-        print ('parameters are: ')
-        print (params.grib_parameters)
         self.params = params
         
     def load_frames(self):
@@ -1011,14 +1008,14 @@ class DatasetSquareAreaCached(Dataset):
         self.frames_data = []
         
         diameter = 1 + 2 * self.params.radius
-        latRange = reversed(calculateLatGridRange(self.params.start_lat, self.params.end_lat))
-        lonRange = reversed(calculateLonGridRange(self.params.start_lon, self.params.end_lon))
+        latRange = list(reversed(calculateLatGridRange(self.params.start_lat, self.params.end_lat)))
+        lonRange = list(reversed(calculateLonGridRange(self.params.start_lon, self.params.end_lon)))
         
         for timeIt in range(self.cached_data[0].shape[0]):
             paramIt = 0
-            for parameter in self.params.grib_parameters:
+            frame = np.empty((diameter, diameter, len(self.params.grib_parameters)))  
 
-                frame = np.empty((diameter, diameter, len(self.params.grib_parameters)))  
+            for parameter in self.params.grib_parameters:
 
                 latIt = 0
                 for lat in latRange:
@@ -1026,7 +1023,6 @@ class DatasetSquareAreaCached(Dataset):
                     for lon in lonRange:
                         latIdx, lonIdx = lonlat_to_idx(lon, lat)
                         frame[latIt, lonIt, paramIt] = self.cached_data[paramIt][timeIt, latIdx, lonIdx]
-                       
                         lonIt = lonIt + 1
                         
                     latIt = latIt + 1
@@ -1035,11 +1031,8 @@ class DatasetSquareAreaCached(Dataset):
             
             self.frames.append(frame)
        
-        print ('')
         self.frames = np.asarray(self.frames)
-        gc.collect()
-        print ('frames shape:')
-        print (self.frames.shape)       
+        gc.collect()     
 
     def normalize_frames(self):
         """ 
@@ -1145,11 +1138,6 @@ class DatasetSquareAreaCached(Dataset):
             dX, dY = self.create_dataset(frame_set)
             self.dataX = np.concatenate((self.dataX, dX), 0) if self.dataX.size else dX
             self.dataY = np.concatenate((self.dataY, dY), 0) if self.dataY.size else dY
-      
-        print ("shape of data X is:")
-        print (self.dataX.shape)
-        print ("shape of data Y is:")
-        print (self.dataY.shape)
 
 
 

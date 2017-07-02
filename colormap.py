@@ -123,4 +123,11 @@ def Gn_r(bins=5):
     """
     colors = [(0, 109, 44),(49, 163, 84),(116, 196, 118),(186, 228, 179),(237, 248, 233)] 
     return colormap(colors, bins, 'Gn_r')  
+    
+def Dark(bins=3):
+    """
+        qualitative colormap from colorbrewer2
+    """
+    colors = [(27,158,119), (217,95,2), (117,112,179)]
+    return colormap(colors, bins, 'Dark')  
        

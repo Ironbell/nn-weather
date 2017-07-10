@@ -108,7 +108,15 @@ def BuRd_r(bins=7):
         (reversed) 2 concatenated single-hue colormaps from colorbrewer2
     """
     colors = [(203, 24, 29),(251, 106, 74),(252, 174, 145),(255,255,255),(189, 215, 231),(107, 174, 214),(33, 113, 181) ] 
-    return colormap(colors, bins, 'BuRd_r')   
+    return colormap(colors, bins, 'BuRd_r')  
+
+    
+def Rd(bins=5):
+    """ 
+        Reversed Red colormap from colorbrewer2
+    """
+    colors = [(253,174,97), (215,25,28)]  
+    return colormap(colors, bins, 'RdYlGn_r')    
     
 def Gn(bins=5):
     """ 

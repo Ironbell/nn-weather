@@ -23,7 +23,6 @@ def round_nearest(x, a):
     return round(x / a) * a
     
 def calculateLatGridRange(start, end):
-    print('end lat is: ' + str(end))
     list = []
     current = start;
     while (True):
@@ -413,7 +412,7 @@ class DatasetArea(Dataset):
                     for lat in reversed(list(drange(bottomLeft.lat, topRight.lat + GRID_SIZE, GRID_SIZE))):
                         for lon in drange(bottomLeft.lon, topRight.lon + GRID_SIZE, GRID_SIZE):
                             nearest = codes_grib_find_nearest(gid, lat, lon)[0]
-                            frame[frameIt, gidIt] = max(0, nearest.value)
+                            frame[frameIt, gidIt] = nearest.value
                             if nearest.value == missingVal:
                                 raise Warning('missing value!')
                             frameIt = frameIt + 1
@@ -553,7 +552,7 @@ class DatasetNearest(Dataset):
                     frameIt = 0
                     for nearest_point in nnearest:
                         nearest = codes_grib_find_nearest(gid, nearest_point[0], nearest_point[1])[0]
-                        frame[frameIt, gidIt] = max(0, nearest.value)
+                        frame[frameIt, gidIt] = nearest.value
                         if nearest.value == missingVal:
                             raise Warning('missing value!')
                         frameIt = frameIt + 1
@@ -606,7 +605,7 @@ class DatasetSquareArea(Dataset):
         Dataset.check_params(self, params)
         
         if not hasattr(params, 'location'):
-            params.location = ""
+            params.location = ''
 
         if params.lon > 360 or params.lon < 0:
             raise Exception('longitude must be between 0 and 360')   
@@ -650,7 +649,7 @@ class DatasetSquareArea(Dataset):
         ''' 
             Loads data from the grib file or directly from the np file
         '''
-        if (self.params.location != ""):
+        if (self.params.location != ''):
             self.load_frames_location()
         else:
             self.load_frames_default()
@@ -750,7 +749,7 @@ class DatasetSquareArea(Dataset):
                         lonIt = 0
                         for lon in lonRange:
                             nearest = codes_grib_find_nearest(gid, lat, lon)[0]
-                            frame[latIt, lonIt, gidIt] = max(0, nearest.value)
+                            frame[latIt, lonIt, gidIt] = nearest.value
                             if nearest.value == missingVal:
                                 raise Warning('missing value!')
 

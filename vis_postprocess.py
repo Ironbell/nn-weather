@@ -25,7 +25,7 @@ def get_default_data_params():
     params.lat = 48.75
     params.lon = 2.25
     params.radius = RADIUS
-    params.location = 'paris'
+    params.location = 'zurich'
     params.grib_parameters = ['temperature', 'pressure']
     params.months = list(range(1, 12 + 1))
     params.years = list(range(1990, 2000))
@@ -83,7 +83,7 @@ def save_flat_error(lstm_neurons=64, train_months='All', grib_parameters=['tempe
         saves the error flat, no abs
     '''
     folder_name = get_folder_name(lstm_neurons, train_months, grib_parameters, forecast_distance, steps_before, lstm_layers)
-    subfolder = GRIB_FOLDER + 'data/paris/' + folder_name
+    subfolder = GRIB_FOLDER + 'data/zurich/' + folder_name
     if not os.path.exists(subfolder):
         print('does not exist: ' + subfolder)
         return
@@ -159,7 +159,7 @@ def save_abs_error(lstm_neurons=64, train_months='All', grib_parameters=['temper
         saves the abs error
     '''
     folder_name = get_folder_name(lstm_neurons, train_months, grib_parameters, forecast_distance, steps_before, lstm_layers)
-    subfolder = GRIB_FOLDER + 'data/paris/' + folder_name
+    subfolder = GRIB_FOLDER + 'data/zurich/' + folder_name
     if not os.path.exists(subfolder):
         print('does not exist: ' + subfolder)
         return
@@ -245,41 +245,41 @@ def save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperatu
     save_flat_error(lstm_neurons, train_months, grib_parameters, forecast_distance, steps_before, lstm_layers)
 
 def main(): 
-    save_errors(lstm_neurons=64, train_months='Summer', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    #save_errors(lstm_neurons=64, train_months='Summer', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
     
-    save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    #save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
     
-    save_errors(lstm_neurons=64, train_months='Winter', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    #save_errors(lstm_neurons=64, train_months='Winter', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
     
-    save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'cloud_cover'], forecast_distance=0, steps_before=20)
+    #save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'cloud_cover'], forecast_distance=0, steps_before=20)
     
-    save_errors(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    #save_errors(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
     
-    save_errors(lstm_neurons=32, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    #save_errors(lstm_neurons=32, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
     
-    save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=1, steps_before=20)
+    #save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=1, steps_before=20)
     
-    save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=4, steps_before=20)
+    #save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=4, steps_before=20)
     
-    save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=30)
+    #save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=30)
 
-    save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=10)
+    #save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=10)
     
     save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'wind_u', 'wind_v'], forecast_distance=0, steps_before=20)
     
     save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'u_ambient', 'v_ambient'], forecast_distance=0, steps_before=20)
     
-    #save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'u_features', 'v_features'], forecast_distance=0, steps_before=20)
+    save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'u_features', 'v_features'], forecast_distance=0, steps_before=20)
     
-    #save_errors(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'u_features', 'v_features', 'u_ambient', 'v_ambient'], forecast_distance=0, steps_before=20)
+    save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'u_features', 'v_features', 'u_ambient', 'v_ambient'], forecast_distance=0, steps_before=20)
     
-    save_errors(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'surface_pressure', 'cloud_cover'], forecast_distance=0, steps_before=20)
+    #save_errors(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'surface_pressure', 'cloud_cover'], forecast_distance=0, steps_before=20)
     
-    save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature'], forecast_distance=0, steps_before=20)
+    #save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature'], forecast_distance=0, steps_before=20)
     
-    save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20, lstm_layers=4) 
+    #save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20, lstm_layers=4) 
     
-    save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure', 'cloud_cover'], forecast_distance=0, steps_before=20)
+    #save_errors(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure', 'cloud_cover'], forecast_distance=0, steps_before=20)
 
     return 1
 

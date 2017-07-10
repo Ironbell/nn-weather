@@ -15,6 +15,7 @@ EPOCHS = 100
 GRIB_FOLDER = '/media/isa/VIS1/'
 RADIUS = 3
 TEST_YEARS = list(range(1990, 2016 + 1))
+LOCATION = 'zurich'
 
 def get_default_data_params():
     params = AttrDict()
@@ -23,10 +24,10 @@ def get_default_data_params():
     params.grib_folder = GRIB_FOLDER
     params.forecast_distance = 0
     params.steps_after = 1
-    params.lat = 48.75
-    params.lon = 2.25
+    params.lat = 33.75
+    params.lon = 241.5
     params.radius = RADIUS
-    params.location = 'paris'
+    params.location = LOCATION
     params.grib_parameters = ['temperature', 'pressure']
     params.months = list(range(1, 12 + 1))
     params.years = list(range(1990, 2000))
@@ -84,7 +85,7 @@ def run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature'
         runs a test for the visualisation model.
     '''
     folder_name = get_folder_name(lstm_neurons, train_months, grib_parameters, forecast_distance, steps_before, lstm_layers)
-    subfolder = GRIB_FOLDER + 'data/paris/' + folder_name
+    subfolder = GRIB_FOLDER + 'data/' + LOCATION + '/' + folder_name
     if not os.path.exists(subfolder):
         os.makedirs(subfolder)
         
@@ -240,41 +241,41 @@ def season_plot(lstm_neurons=64, train_months='all', grib_parameters=['temperatu
     display_score(score, [1990,2016,12,1], subfolder + '/season_comparision.png')
 
 def main(): 
-    run_test(lstm_neurons=64, train_months='Summer', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    #run_test(lstm_neurons=64, train_months='Summer', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
     
-    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
     
-    run_test(lstm_neurons=64, train_months='Winter', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    #run_test(lstm_neurons=64, train_months='Winter', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
     
-    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'cloud_cover'], forecast_distance=0, steps_before=20)
+    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'cloud_cover'], forecast_distance=0, steps_before=20)
     
-    run_test(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    #run_test(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
     
-    run_test(lstm_neurons=32, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
+    #run_test(lstm_neurons=32, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20)
     
-    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=1, steps_before=20)
+    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=1, steps_before=20)
     
-    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=4, steps_before=20)
+    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=4, steps_before=20)
     
-    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=30)
+    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=30)
 
-    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=10)
+    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=10)
     
-    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'wind_u', 'wind_v'], forecast_distance=0, steps_before=20)
+    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'wind_u', 'wind_v'], forecast_distance=0, steps_before=20)
     
     run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'u_ambient', 'v_ambient'], forecast_distance=0, steps_before=20)
     
-    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'u_features', 'v_features'], forecast_distance=0, steps_before=20)
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'u_features', 'v_features'], forecast_distance=0, steps_before=20)
     
-    #run_test(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'u_features', 'v_features', 'u_ambient', 'v_ambient'], forecast_distance=0, steps_before=20)
+    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'u_features', 'v_features', 'u_ambient', 'v_ambient'], forecast_distance=0, steps_before=20)
     
-    run_test(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'surface_pressure', 'cloud_cover'], forecast_distance=0, steps_before=20)
+    #run_test(lstm_neurons=128, train_months='All', grib_parameters=['temperature', 'surface_pressure', 'cloud_cover'], forecast_distance=0, steps_before=20)
     
-    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature'], forecast_distance=0, steps_before=20)
+    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature'], forecast_distance=0, steps_before=20)
     
-    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20, lstm_layers=4) 
+    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure'], forecast_distance=0, steps_before=20, lstm_layers=4) 
     
-    run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure', 'cloud_cover'], forecast_distance=0, steps_before=20)
+    #run_test(lstm_neurons=64, train_months='All', grib_parameters=['temperature', 'surface_pressure', 'cloud_cover'], forecast_distance=0, steps_before=20)
 
     return 1
 

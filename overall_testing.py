@@ -14,7 +14,7 @@ import colormap as cm
 import time
 
 GRIB_FOLDER = '/media/isa/VIS1/'
-MODEL_PATH = 'data/zurich/n64_pTempSpress_mAll_f0_s20_l2/model/model.h5'
+MODEL_PATH = 'data/los_angeles/n64_pTempSpress_mAll_f0_s20_l2/model/model.h5'
 RADIUS = 3
 
 def get_default_data_params():

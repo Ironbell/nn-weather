@@ -94,7 +94,7 @@ def save_location(grib_parameter, loc='los_angeles', latitude=33.75, longitude=2
                 lonIt = 0
                 for lon in drange(bottomLeft.lon, topRight.lon + GRID_SIZE, GRID_SIZE):
                     nearest = codes_grib_find_nearest(gid, lat, lon)[0]
-                    current_day[hour, latIt, lonIt] = max(0, nearest.value)
+                    current_day[hour, latIt, lonIt] = nearest.value
                     lonIt = lonIt + 1  
                 latIt = latIt + 1
         
@@ -176,16 +176,19 @@ def save_location_uv(grib_parameter='u_ambient', binary_file='uv_ambient', binar
             np.save(year_folder + '/' + str(month) + '.npy', current_month)
 
 def main():
-    save_location('temperature')
-    save_location('wind_u')
-    save_location('wind_v') 
-    save_location('surface_pressure')
-    save_location('pressure') 
-    save_location('cloud_cover')
-    save_location_uv('u_ambient', 'uv_ambient', '.bin_ambient20.bin', 'u')
-    save_location_uv('v_ambient', 'uv_ambient', '.bin_ambient20.bin', 'v')
-    save_location_uv('u_features', 'uv_features', '.bin_features20.bin', 'u')
-    save_location_uv('v_features', 'uv_features', '.bin_features20.bin', 'v')
+    #save_location('temperature')
+    #save_location('wind_u')
+    #save_location('wind_v') 
+    #save_location('surface_pressure')
+    #save_location('pressure') 
+    #save_location('cloud_cover')
+    save_location('total_precipitation', loc='zurich', latitude=47.25, longitude=8.25)
+    save_location('total_precipitation', loc='paris', latitude=48.75, longitude=2.25)
+    save_location('total_precipitation', loc='los_angeles', latitude=33.75, longitude=241.5)
+    #save_location_uv('u_ambient', 'uv_ambient', '.bin_ambient20.bin', 'u')
+    #save_location_uv('v_ambient', 'uv_ambient', '.bin_ambient20.bin', 'v')
+    #save_location_uv('u_features', 'uv_features', '.bin_features20.bin', 'u')
+    #save_location_uv('v_features', 'uv_features', '.bin_features20.bin', 'v')
     
     return 1
 
